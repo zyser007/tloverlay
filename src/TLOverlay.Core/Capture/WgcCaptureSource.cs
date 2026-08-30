@@ -64,7 +64,7 @@ public sealed class WgcCaptureSource : ICaptureSource
             _framePool = Direct3D11CaptureFramePool.CreateFreeThreaded(
                 _device,
                 DirectXPixelFormat.B8G8R8A8UIntNormalized,
-                numberOfBuffers: 2,
+                2,
                 _lastSize);
 
             _framePool.FrameArrived += OnFrameArrived;

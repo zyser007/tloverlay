@@ -43,7 +43,7 @@ internal static class CaptureInterop
 
         try
         {
-            return WinRT.MarshalInterface<GraphicsCaptureItem>.FromAbi(itemPointer);
+            return WinRT.MarshalInspectable<GraphicsCaptureItem>.FromAbi(itemPointer);
         }
         finally
         {

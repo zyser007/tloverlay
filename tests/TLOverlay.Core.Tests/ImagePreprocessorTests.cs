@@ -28,7 +28,7 @@ public class ImagePreprocessorTests
         var options = new PreprocessOptions { TargetHeight = 480, MaxDimension = 2600 };
 
         // A 60px-tall dialogue strip should be scaled, but never past the 4x cap.
-        Assert.Equal(4.0, ImagePreprocessor.ChooseScale(800, 60, options));
+        Assert.Equal(4.0, ImagePreprocessor.ChooseScale(400, 60, options));
     }
 
     [Fact]

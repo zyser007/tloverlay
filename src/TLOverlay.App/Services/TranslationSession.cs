@@ -165,13 +165,13 @@ public sealed class TranslationSession : IAsyncDisposable
     }
 
     private void OnTranslationReady(object? sender, RegionTranslation translation) =>
-        _dispatcher.BeginInvoke(() => _overlay?.ShowTranslation(translation));
+        _ = _dispatcher.InvokeAsync(() => _overlay?.ShowTranslation(translation));
 
     private void OnTextCleared(object? sender, RegionCleared cleared) =>
-        _dispatcher.BeginInvoke(() => _overlay?.ClearRegion(cleared.RegionName));
+        _ = _dispatcher.InvokeAsync(() => _overlay?.ClearRegion(cleared.RegionName));
 
     private void OnForegroundChanged(object? sender, bool isGameForeground) =>
-        _dispatcher.BeginInvoke(() =>
+        _ = _dispatcher.InvokeAsync(() =>
         {
             if (_overlay is null)
             {
@@ -189,12 +189,12 @@ public sealed class TranslationSession : IAsyncDisposable
         });
 
     private void OnTargetMoved(object? sender, EventArgs e) =>
-        _dispatcher.BeginInvoke(() => _overlay?.AlignToGame());
+        _ = _dispatcher.InvokeAsync(() => _overlay?.AlignToGame());
 
     private void Report(string message)
     {
         Log.Information("Session: {Message}", message);
-        _dispatcher.BeginInvoke(() => Status?.Invoke(this, message));
+        _ = _dispatcher.InvokeAsync(() => Status?.Invoke(this, message));
     }
 
     public async ValueTask DisposeAsync()

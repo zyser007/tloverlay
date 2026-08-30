@@ -3,11 +3,13 @@
   <PropertyGroup>
     <!--
       WinRT APIs (Windows.Graphics.Capture, Windows.Media.Ocr) require a Windows
-      platform TFM. 10.0.19041 is the first build that exposes the capture
-      settings we depend on (IsCursorCaptureEnabled); IsBorderRequired arrives
-      later and is probed at runtime via ApiInformation.
+      platform TFM. We compile against the 22621 projection because
+      GraphicsCaptureSession.IsBorderRequired only exists there, but the app
+      still runs on Windows 10 2004 - that property is probed with
+      ApiInformation before use, so the older OS simply keeps its capture
+      border.
     -->
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.22621.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
