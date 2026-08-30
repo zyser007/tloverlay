@@ -29,6 +29,11 @@ public sealed class SqliteTranslationCache : ITranslationCache, IDisposable
         {
             DataSource = databasePath,
             Mode = SqliteOpenMode.ReadWriteCreate,
+
+            // The app holds one connection for its whole lifetime, so pooling
+            // buys nothing - and a pooled handle outliving Dispose keeps the
+            // cache file locked against deletion or a profile export.
+            Pooling = false,
         }.ToString());
 
         _connection.Open();

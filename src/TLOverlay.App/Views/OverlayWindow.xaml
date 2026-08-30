@@ -1,0 +1,19 @@
+<Window x:Class="TLOverlay.App.Views.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TLOverlay"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Topmost="True"
+        Focusable="False"
+        ShowActivated="False">
+
+  <!--
+    A bare Canvas: every translation panel is positioned in pixels that came from
+    OCR, so no layout system should be second-guessing where they go.
+  -->
+  <Canvas x:Name="Surface" />
+</Window>

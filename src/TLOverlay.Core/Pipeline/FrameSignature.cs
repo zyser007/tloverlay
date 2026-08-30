@@ -33,32 +33,43 @@ public static class FrameSignature
         }
 
         var signature = new byte[Length];
-        Span<long> sums = stackalloc long[Length];
-        Span<int> counts = stackalloc int[Length];
 
-        for (int y = 0; y < height; y++)
+        // Map each cell back to a source rectangle rather than mapping pixels
+        // forward into cells. Forward mapping leaves cells unsampled whenever the
+        // region is under 16 pixels on an axis - which a subtitle strip routinely
+        // is - and those empty cells then read as pure black in every comparison.
+        for (int cellY = 0; cellY < Size; cellY++)
         {
-            int cellY = y * Size / height;
-            int rowStart = y * stride;
+            int y0 = cellY * height / Size;
+            int y1 = Math.Max(((cellY + 1) * height / Size), y0 + 1);
+            y1 = Math.Min(y1, height);
 
-            for (int x = 0; x < width; x++)
+            for (int cellX = 0; cellX < Size; cellX++)
             {
-                int cellX = x * Size / width;
-                int p = rowStart + (x * 4);
+                int x0 = cellX * width / Size;
+                int x1 = Math.Max(((cellX + 1) * width / Size), x0 + 1);
+                x1 = Math.Min(x1, width);
 
-                // BT.601 luma, integer form. Good enough for change detection and
-                // far cheaper than a float conversion per pixel.
-                int luma = ((pixels[p + 2] * 299) + (pixels[p + 1] * 587) + (pixels[p] * 114)) / 1000;
+                long total = 0;
+                int samples = 0;
 
-                int cell = (cellY * Size) + cellX;
-                sums[cell] += luma;
-                counts[cell]++;
+                for (int y = y0; y < y1; y++)
+                {
+                    int rowStart = y * stride;
+
+                    for (int x = x0; x < x1; x++)
+                    {
+                        int p = rowStart + (x * 4);
+
+                        // BT.601 luma, integer form. Good enough for change
+                        // detection and far cheaper than a float conversion.
+                        total += ((pixels[p + 2] * 299) + (pixels[p + 1] * 587) + (pixels[p] * 114)) / 1000;
+                        samples++;
+                    }
+                }
+
+                signature[(cellY * Size) + cellX] = samples == 0 ? (byte)0 : (byte)(total / samples);
             }
-        }
-
-        for (int i = 0; i < Length; i++)
-        {
-            signature[i] = counts[i] == 0 ? (byte)0 : (byte)(sums[i] / counts[i]);
         }
 
         return signature;

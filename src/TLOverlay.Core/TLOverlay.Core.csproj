@@ -3,6 +3,8 @@
   <PropertyGroup>
     <RootNamespace>TLOverlay.Core</RootNamespace>
     <AssemblyName>TLOverlay.Core</AssemblyName>
+    <!-- Pixel access to a locked SoftwareBitmap goes through IMemoryBufferByteAccess. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
