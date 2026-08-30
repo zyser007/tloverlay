@@ -1,0 +1,75 @@
+name: Release
+
+# Cutting a release is pushing a tag. Nothing else publishes one, so the tag is
+# always the source of truth for what shipped.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build, without the leading v (e.g. 0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Work out the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } else {
+            '${{ inputs.version }}'
+          }
+          Write-Host "Building $version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Test
+        run: dotnet test tests/TLOverlay.Core.Tests/TLOverlay.Core.Tests.csproj --configuration Release
+
+      # Self-contained: players should not have to install a .NET runtime before
+      # they can read their game. Trimming is deliberately off - WPF does not
+      # support it, and enabling it produces a build that crashes at startup.
+      - name: Publish
+        run: >
+          dotnet publish src/TLOverlay.App/TLOverlay.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+          -p:Version=${{ steps.version.outputs.version }}
+          --output artifacts/TLOverlay-win-x64
+
+      - name: Stage the package
+        shell: pwsh
+        run: |
+          # Licence text ships with the binary; models do not - they are several
+          # gigabytes and the app fetches them on first run.
+          Copy-Item NOTICE.md, README.md artifacts/TLOverlay-win-x64/
+          Compress-Archive -Path artifacts/TLOverlay-win-x64/* `
+            -DestinationPath "TLOverlay-${{ steps.version.outputs.version }}-win-x64.zip"
+
+      - name: Create the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.version.outputs.version }}" `
+            "TLOverlay-${{ steps.version.outputs.version }}-win-x64.zip" `
+            --title "TLOverlay ${{ steps.version.outputs.version }}" `
+            --generate-notes

@@ -38,34 +38,20 @@ Three design decisions carry most of the weight:
 
 ## Requirements
 
+**To run**
+
 - Windows 10 build 19041 (2004) or newer, or Windows 11
-- .NET 8 SDK to build
 - The game must run **Windowed Fullscreen / Borderless**. True exclusive
   fullscreen cannot be captured.
 - English OCR language pack (present by default on virtually all installs)
+- Nothing else. Release builds are self-contained, so no .NET runtime install.
 
-## Build
+**To build**
 
-```powershell
-dotnet build tloverlay.sln -c Release
-dotnet test tests/TLOverlay.Core.Tests/TLOverlay.Core.Tests.csproj
-```
-
-## Models
-
-The translation model and `llama-server.exe` are **not** in this repository, and
-you do not need a terminal to get them. Run the app: if either is missing it
-opens a setup screen that downloads both, with a progress bar, a resume if the
-connection drops, and a Browse button for files you already have. Reachable
-later from the control panel as **ตั้งค่าโมเดล**, which is also how you switch
-model or move the work between CPU and GPU.
-
-If you would rather script it, `tools/fetch-models.ps1` does the same job, but
-it needs PowerShell 7 (`pwsh`), which Windows does not ship by default.
-
-See [NOTICE.md](NOTICE.md) for model licensing - it matters, and not every
-model here may be used commercially. The setup screen shows each model's licence
-next to it in the dropdown.
+- .NET 8 SDK
+- **Windows.** This does not cross-compile: WPF and the WinRT projections have no
+  Linux or macOS build, so `dotnet build` fails outside Windows no matter the
+  runtime identifier.
 
 ## Using it
 
@@ -84,6 +70,95 @@ next to it in the dropdown.
 | `Ctrl+Alt+R` | Draw the capture region |
 | `Ctrl+Alt+H` | Hide / show the overlay |
 | `Ctrl+Alt+C` | Toggle click-through |
+
+## Models
+
+The translation model and `llama-server.exe` are **not** in this repository, and
+you do not need a terminal to get them. Run the app: if either is missing it
+opens a setup screen that downloads both, with a progress bar, a resume if the
+connection drops, and a Browse button for files you already have. Reachable
+later from the control panel as **ตั้งค่าโมเดล**, which is also how you switch
+model or move the work between CPU and GPU.
+
+If you would rather script it, `tools/fetch-models.ps1` does the same job, but
+it needs PowerShell 7 (`pwsh`), which Windows does not ship by default.
+
+See [NOTICE.md](NOTICE.md) for model licensing - it matters, and not every
+model here may be used commercially. The setup screen shows each model's licence
+next to it in the dropdown.
+
+## Build
+
+```powershell
+dotnet build tloverlay.sln -c Release
+dotnet test tests/TLOverlay.Core.Tests/TLOverlay.Core.Tests.csproj
+dotnet run --project src/TLOverlay.App
+```
+
+The projects compile against `net8.0-windows10.0.22621.0` but declare
+`SupportedOSPlatformVersion` 10.0.19041.0. The newer projection is only needed at
+compile time, for `GraphicsCaptureSession.IsBorderRequired`; that property is
+probed with `ApiInformation` before use, so the app still runs on Windows 10
+2004 - it just keeps the yellow capture border there.
+
+## Release
+
+### Producing a build
+
+```powershell
+dotnet publish src/TLOverlay.App/TLOverlay.App.csproj `
+  --configuration Release `
+  --runtime win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:DebugType=None `
+  --output artifacts/TLOverlay-win-x64
+```
+
+Three of those flags are load-bearing, and one option must stay off:
+
+- `--self-contained true` - the audience is players, not developers. Asking them
+  to install the .NET Desktop Runtime before they can read their game is a step
+  most will not get past. Costs about 150 MB.
+- `-p:IncludeNativeLibrariesForSelfExtract=true` - `Microsoft.Data.Sqlite` needs
+  the native `e_sqlite3.dll`. Without this it never leaves the bundle and the
+  translation cache throws on the first lookup, at runtime, on the user's
+  machine.
+- `--runtime win-x64` - required for a self-contained build, and the only
+  architecture the capture interop targets.
+- **Never `-p:PublishTrimmed=true`.** WPF does not support trimming. The build
+  succeeds and the executable crashes on startup, which is the worst possible
+  place to find out.
+
+### What ships, and what does not
+
+The zip contains `TLOverlay.exe`, `NOTICE.md` and `README.md`.
+
+It does **not** contain `models/` or `runtime/`. Those are several gigabytes, and
+their licences differ per model - some are non-commercial. The app fetches them
+itself on first run, which is the whole reason the setup screen exists.
+
+### Cutting a release
+
+1. Bump `<Version>` in `Directory.Build.props`.
+2. Commit that on the default branch.
+3. `git tag v0.2.0 && git push origin v0.2.0`
+
+The tag is what triggers `.github/workflows/release.yml`: it runs the tests,
+publishes, zips, and creates the GitHub Release with generated notes. Nothing
+else publishes a release, so a tag always corresponds to something that shipped.
+
+CI runs the same publish command on every push and uploads the result as a build
+artifact. A publish that has stopped working is therefore caught on the commit
+that broke it, not while cutting a tag.
+
+### Note on signing
+
+The executable is unsigned, so Windows SmartScreen shows a warning the first time
+a user runs it ("More info" then "Run anyway"). Removing that needs a code
+signing certificate, which this project does not have. Worth saying plainly in
+release notes rather than leaving people to wonder.
 
 ## Status
 

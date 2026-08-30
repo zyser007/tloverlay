@@ -36,3 +36,32 @@ jobs:
           name: test-results
           path: TestResults
           if-no-files-found: ignore
+
+      # Runs the exact command the release uses. Publishing has its own ways to
+      # fail that a plain build never hits - single-file packing, the RID-specific
+      # restore, SQLite's native library - so it is worth proving on every push
+      # rather than discovering it while cutting a tag.
+      - name: Publish
+        run: >
+          dotnet publish src/TLOverlay.App/TLOverlay.App.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:DebugType=None
+          --output artifacts/TLOverlay-win-x64
+
+      - name: Check the executable was produced
+        shell: pwsh
+        run: |
+          $exe = "artifacts/TLOverlay-win-x64/TLOverlay.exe"
+          if (-not (Test-Path $exe)) { throw "TLOverlay.exe was not produced" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "TLOverlay.exe is $mb MB"
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v4
+        with:
+          name: TLOverlay-win-x64
+          path: artifacts/TLOverlay-win-x64
