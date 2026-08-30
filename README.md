@@ -120,7 +120,8 @@ Three of those flags are load-bearing, and one option must stay off:
 
 - `--self-contained true` - the audience is players, not developers. Asking them
   to install the .NET Desktop Runtime before they can read their game is a step
-  most will not get past. Costs about 150 MB.
+  most will not get past. The cost is size: the release zip is around 75 MB.
+  Single-file packing means it really is one `TLOverlay.exe`, nothing beside it.
 - `-p:IncludeNativeLibrariesForSelfExtract=true` - `Microsoft.Data.Sqlite` needs
   the native `e_sqlite3.dll`. Without this it never leaves the bundle and the
   translation cache throws on the first lookup, at runtime, on the user's
