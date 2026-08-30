@@ -62,8 +62,41 @@ pwsh tools/fetch-models.ps1
 See [NOTICE.md](NOTICE.md) for model licensing - it matters, and not every
 model here may be used commercially.
 
+## Using it
+
+1. `pwsh tools/fetch-models.ps1` once, to get the server and model.
+2. `dotnet run --project src/TLOverlay.App`
+3. Pick the game window from the list. The panel warns you if the window still
+   has a border, which usually means the game is in exclusive fullscreen.
+4. `Ctrl+Alt+R`, drag a box over the dialogue area, press Enter. The region is
+   saved per game and reloads automatically next time.
+5. `Ctrl+Alt+T` to start translating.
+
+| Hotkey | Action |
+|---|---|
+| `Ctrl+Alt+T` | Start / stop translating |
+| `Ctrl+Alt+R` | Draw the capture region |
+| `Ctrl+Alt+H` | Hide / show the overlay |
+| `Ctrl+Alt+C` | Toggle click-through |
+
 ## Status
 
-Core pipeline, profiles, glossary, caching and the local translation backend are
-implemented and unit-tested. Capture, OCR and the overlay window are being built
-on top of them.
+End to end and working: capture, OCR, translation, overlay, per-game profiles,
+glossary, caching, hotkeys and the region editor. The control panel reports
+average OCR and translation time plus the frame skip ratio, which is the number
+that tells you whether change detection is doing its job - below roughly 80%
+during play means a region is picking up animated scenery.
+
+Not built yet: snip-once translation (`Ctrl+Alt+S` reports this), the NLLB ONNX
+backend as a lighter alternative to the local LLM, and automatic region
+detection.
+
+## Known limits
+
+- Exclusive fullscreen cannot be captured. Borderless only.
+- Windows 10 builds before Windows 11 show a yellow capture border around the
+  game that the OS will not let us turn off.
+- Text baked into textures with heavily stylised fonts may not read.
+- A local LLM competes with the game for VRAM. `gpuLayers` defaults to 0 (CPU)
+  in `%AppData%\TLOverlay\settings.json` for that reason; raise it if you have
+  headroom and want sub-second translations.
