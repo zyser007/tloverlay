@@ -1,0 +1,32 @@
+<Application x:Class="TLOverlay.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="Views/ControlPanelWindow.xaml">
+  <Application.Resources>
+
+    <!--
+      Thai needs a font with proper mark positioning: stacked vowels and tone
+      marks render as overlapping boxes in many Latin-first UI fonts. Leelawadee
+      UI ships with Windows and handles this correctly, so the app has a working
+      Thai face with no bundled font.
+    -->
+    <FontFamily x:Key="ThaiUiFont">Leelawadee UI, Segoe UI, Tahoma</FontFamily>
+
+    <SolidColorBrush x:Key="PanelBackground" Color="#FF1B1D23" />
+    <SolidColorBrush x:Key="PanelForeground" Color="#FFE9ECF2" />
+    <SolidColorBrush x:Key="PanelMuted" Color="#FF9AA3B2" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF4C8DFF" />
+
+    <Style TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
+      <Setter Property="Foreground" Value="{StaticResource PanelForeground}" />
+    </Style>
+
+    <Style TargetType="Button">
+      <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
+      <Setter Property="Padding" Value="14,7" />
+      <Setter Property="MinWidth" Value="110" />
+    </Style>
+
+  </Application.Resources>
+</Application>
