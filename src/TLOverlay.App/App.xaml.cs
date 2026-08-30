@@ -2,6 +2,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Serilog;
+using TLOverlay.App.Services;
+using TLOverlay.App.Views;
 
 namespace TLOverlay.App;
 
@@ -32,6 +34,22 @@ public partial class App : Application
             Log.Error(args.ExceptionObject as Exception, "Unhandled exception.");
 
         base.OnStartup(e);
+
+        // The setup window is shown modally before anything else exists, so the
+        // app must not treat closing it as "the last window closed".
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        var settings = SettingsStore.Load(DataDirectory);
+
+        if (!TranslatorFactory.IsModelInstalled(settings.Translator))
+        {
+            new SetupWindow(settings).ShowDialog();
+        }
+
+        var panel = new ControlPanelWindow();
+        MainWindow = panel;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+        panel.Show();
     }
 
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

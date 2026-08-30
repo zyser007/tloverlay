@@ -57,13 +57,13 @@ public sealed class LlamaServerProcess : IAsyncDisposable
 
             if (!File.Exists(_options.ExecutablePath))
             {
-                _logger.LogError("llama-server executable not found at {Path}. Run tools/fetch-models.ps1.", _options.ExecutablePath);
+                _logger.LogError("llama-server executable not found at {Path}. Use the setup screen to install it.", _options.ExecutablePath);
                 return false;
             }
 
             if (!File.Exists(_options.ModelPath))
             {
-                _logger.LogError("Model file not found at {Path}. Run tools/fetch-models.ps1.", _options.ModelPath);
+                _logger.LogError("Model file not found at {Path}. Use the setup screen to install it.", _options.ModelPath);
                 return false;
             }
 

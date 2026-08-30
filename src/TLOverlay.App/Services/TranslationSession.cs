@@ -70,7 +70,7 @@ public sealed class TranslationSession : IAsyncDisposable
 
         if (!TranslatorFactory.IsModelInstalled(_settings))
         {
-            Report("ยังไม่มีโมเดลแปลภาษา — รัน tools/fetch-models.ps1 ก่อน");
+            Report("ยังไม่มีโมเดลแปลภาษา — กดปุ่ม “ตั้งค่าโมเดล” เพื่อดาวน์โหลด");
             return;
         }
 

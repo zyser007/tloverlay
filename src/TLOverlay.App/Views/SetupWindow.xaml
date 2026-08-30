@@ -1,0 +1,167 @@
+<Window x:Class="TLOverlay.App.Views.SetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TLOverlay — ตั้งค่าครั้งแรก"
+        Height="620" Width="640"
+        ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource PanelBackground}"
+        FontFamily="{StaticResource ThaiUiFont}">
+
+  <Window.Resources>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="#FF23262E" />
+      <Setter Property="BorderBrush" Value="#FF343842" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,12" />
+    </Style>
+
+    <Style x:Key="PathText" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="Consolas, Cascadia Mono" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{StaticResource PanelMuted}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+
+    <Style x:Key="SmallButton" TargetType="Button">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="11,5" />
+      <Setter Property="FontSize" Value="12.5" />
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Margin="0,0,0,14">
+      <TextBlock Text="ตั้งค่าครั้งแรก" FontSize="19" FontWeight="SemiBold" />
+      <TextBlock Text="โปรแกรมแปลภาษาในเครื่องคุณเอง จึงต้องมี 2 อย่างนี้ก่อน — ดาวน์โหลดครั้งเดียว หลังจากนั้นใช้งานได้แบบออฟไลน์ตลอด"
+                 Foreground="{StaticResource PanelMuted}"
+                 TextWrapping="Wrap"
+                 Margin="0,4,0,0" />
+    </StackPanel>
+
+    <!-- llama-server.exe -->
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,10">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="24" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock x:Name="ServerGlyph" Grid.Column="0" Text="✗" FontSize="15" VerticalAlignment="Center" />
+
+        <StackPanel Grid.Column="1" Margin="6,0,10,0">
+          <TextBlock Text="เซิร์ฟเวอร์แปลภาษา" FontWeight="SemiBold" />
+          <TextBlock x:Name="ServerPath" Style="{StaticResource PathText}" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal">
+          <Button x:Name="ServerDownloadButton" Style="{StaticResource SmallButton}"
+                  Content="ดาวน์โหลด" Click="OnDownloadServerClick" Margin="0,0,8,0" />
+          <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…" Click="OnBrowseServerClick" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- model -->
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,14">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="24" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock x:Name="ModelGlyph" Grid.Column="0" Text="✗" FontSize="15" VerticalAlignment="Center" />
+
+        <StackPanel Grid.Column="1" Margin="6,0,10,0">
+          <TextBlock Text="โมเดลแปลภาษา" FontWeight="SemiBold" />
+          <TextBlock x:Name="ModelPath" Style="{StaticResource PathText}" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal">
+          <Button x:Name="ModelDownloadButton" Style="{StaticResource SmallButton}"
+                  Content="ดาวน์โหลด" Click="OnDownloadModelClick" Margin="0,0,8,0" />
+          <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…" Click="OnBrowseModelClick" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <StackPanel Grid.Row="3" Margin="0,0,0,14">
+      <TextBlock Text="โมเดล" Foreground="{StaticResource PanelMuted}" FontSize="12" Margin="0,0,0,5" />
+      <ComboBox x:Name="ModelCombo" SelectionChanged="OnModelSelectionChanged" Padding="8,6" />
+      <TextBlock x:Name="LicenseText" Foreground="{StaticResource PanelMuted}" FontSize="11.5"
+                 TextWrapping="Wrap" Margin="0,6,0,0" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="4" Margin="0,0,0,14">
+      <TextBlock Text="รันโมเดลบน" Foreground="{StaticResource PanelMuted}" FontSize="12" Margin="0,0,0,5" />
+      <UniformGrid Columns="2">
+        <RadioButton x:Name="CpuOption" GroupName="Backend" IsChecked="True" Margin="0,0,6,0"
+                     Foreground="{StaticResource PanelForeground}">
+          <StackPanel>
+            <TextBlock Text="CPU" FontWeight="SemiBold" />
+            <TextBlock Text="ไม่แย่ VRAM กับเกม แปลช้ากว่า (~2–4 วิ)"
+                       Foreground="{StaticResource PanelMuted}" FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="GpuOption" GroupName="Backend" Margin="6,0,0,0"
+                     Foreground="{StaticResource PanelForeground}">
+          <StackPanel>
+            <TextBlock Text="GPU NVIDIA" FontWeight="SemiBold" />
+            <TextBlock Text="เร็วกว่ามาก (~0.5 วิ) แต่กิน VRAM ~2.5 GB"
+                       Foreground="{StaticResource PanelMuted}" FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
+        </RadioButton>
+      </UniformGrid>
+    </StackPanel>
+
+    <StackPanel Grid.Row="5" x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,0,0,14">
+      <ProgressBar x:Name="DownloadBar" Height="6" Minimum="0" Maximum="1"
+                   Background="#FF14161B" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
+      <Grid Margin="0,7,0,0">
+        <TextBlock x:Name="ProgressLeft" HorizontalAlignment="Left"
+                   FontFamily="Consolas, Cascadia Mono" FontSize="11.5"
+                   Foreground="{StaticResource PanelMuted}" />
+        <TextBlock x:Name="ProgressRight" HorizontalAlignment="Right"
+                   FontFamily="Consolas, Cascadia Mono" FontSize="11.5"
+                   Foreground="{StaticResource PanelMuted}" />
+      </Grid>
+    </StackPanel>
+
+    <Expander Grid.Row="6" VerticalAlignment="Top" Header="ไม่มีเน็ตบนเครื่องนี้?"
+              Foreground="{StaticResource AccentBrush}" FontSize="13" Margin="0,4,0,0">
+      <StackPanel Margin="4,8,0,0">
+        <TextBlock Foreground="{StaticResource PanelMuted}" FontSize="12" TextWrapping="Wrap"
+                   Text="โหลดไฟล์จากเครื่องอื่นแล้วก๊อปมาใส่ USB ได้ แล้วกดปุ่ม “เลือกไฟล์เอง…” ด้านบน" />
+        <TextBox x:Name="OfflineUrls" Margin="0,8,0,0" IsReadOnly="True" TextWrapping="Wrap"
+                 BorderThickness="0" Background="#FF14161B" Foreground="#FFC3CCDB"
+                 FontFamily="Consolas, Cascadia Mono" FontSize="11" Padding="8" />
+      </StackPanel>
+    </Expander>
+
+    <Grid Grid.Row="7" Margin="0,14,0,0">
+      <TextBlock x:Name="StatusText" HorizontalAlignment="Left" VerticalAlignment="Center"
+                 TextWrapping="Wrap" MaxWidth="330" Foreground="{StaticResource PanelMuted}" FontSize="12" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton" Content="ยกเลิกการโหลด" Click="OnCancelDownloadClick"
+                Visibility="Collapsed" Margin="0,0,10,0" />
+        <Button x:Name="SkipButton" Content="ข้ามไปก่อน" Click="OnSkipClick" Margin="0,0,10,0" />
+        <Button x:Name="DoneButton" Content="เสร็จแล้ว" Click="OnDoneClick" IsEnabled="False" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

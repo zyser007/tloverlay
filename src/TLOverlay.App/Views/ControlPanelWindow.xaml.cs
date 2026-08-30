@@ -240,6 +240,17 @@ public partial class ControlPanelWindow : Window
             $"ข้ามเฟรม {metrics.SkipRatio:P0} · แปลไปแล้ว {metrics.TranslationsIssued} ประโยค";
     }
 
+    private void OnSetupClick(object sender, RoutedEventArgs e)
+    {
+        // Reachable at any time, not only on first run: this is also how the
+        // player switches model or moves the work between CPU and GPU.
+        new SetupWindow(_settings) { Owner = this }.ShowDialog();
+
+        StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator)
+            ? "โมเดลพร้อมใช้งานแล้ว"
+            : "ยังตั้งค่าโมเดลไม่ครบ — ยังแปลไม่ได้";
+    }
+
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
 
     private async void OnClosed(object? sender, EventArgs e)

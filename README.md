@@ -53,19 +53,25 @@ dotnet test tests/TLOverlay.Core.Tests/TLOverlay.Core.Tests.csproj
 
 ## Models
 
-The translation model and `llama-server.exe` are **not** in this repository.
+The translation model and `llama-server.exe` are **not** in this repository, and
+you do not need a terminal to get them. Run the app: if either is missing it
+opens a setup screen that downloads both, with a progress bar, a resume if the
+connection drops, and a Browse button for files you already have. Reachable
+later from the control panel as **ตั้งค่าโมเดล**, which is also how you switch
+model or move the work between CPU and GPU.
 
-```powershell
-pwsh tools/fetch-models.ps1
-```
+If you would rather script it, `tools/fetch-models.ps1` does the same job, but
+it needs PowerShell 7 (`pwsh`), which Windows does not ship by default.
 
 See [NOTICE.md](NOTICE.md) for model licensing - it matters, and not every
-model here may be used commercially.
+model here may be used commercially. The setup screen shows each model's licence
+next to it in the dropdown.
 
 ## Using it
 
-1. `pwsh tools/fetch-models.ps1` once, to get the server and model.
-2. `dotnet run --project src/TLOverlay.App`
+1. `dotnet run --project src/TLOverlay.App`
+2. First run opens the setup screen. Download the model, or point it at one you
+   already have. This happens once.
 3. Pick the game window from the list. The panel warns you if the window still
    has a border, which usually means the game is in exclusive fullscreen.
 4. `Ctrl+Alt+R`, drag a box over the dialogue area, press Enter. The region is
