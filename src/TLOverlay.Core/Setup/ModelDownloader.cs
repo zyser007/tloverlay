@@ -32,9 +32,15 @@ public sealed record DownloadProgress(long BytesCompleted, long? TotalBytes, dou
             }
 
             double seconds = (TotalBytes.Value - BytesCompleted) / BytesPerSecond;
-            return seconds is > 0 and < TimeSpan.MaxValue.TotalSeconds
-                ? TimeSpan.FromSeconds(seconds)
-                : null;
+
+            // Guard the ends rather than pattern-match: a stalled transfer gives
+            // an infinity here, and TimeSpan.FromSeconds throws on one.
+            if (double.IsNaN(seconds) || seconds <= 0 || seconds > TimeSpan.MaxValue.TotalSeconds)
+            {
+                return null;
+            }
+
+            return TimeSpan.FromSeconds(seconds);
         }
     }
 }
