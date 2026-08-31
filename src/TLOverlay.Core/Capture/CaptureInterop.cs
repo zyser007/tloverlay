@@ -201,7 +201,69 @@ internal interface IGraphicsCaptureItemInterop
 /// </summary>
 internal static class SoftwareBitmapInterop
 {
-    public static CapturedFrame ToFrame(SoftwareBitmap bitmap)
+    /// <summary>
+    /// DataWriter.WriteBytes writes the whole array it is handed, so this needs
+    /// an exactly sized buffer rather than one from ArrayPool. It runs once per
+    /// OCR pass on an image that can itself be megabytes, which is often enough
+    /// to be worth not allocating.
+    /// </summary>
+    private static readonly ExactSizeBufferPool TightRows = new();
+
+    public static SoftwareBitmap ToSoftwareBitmap(CapturedFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+
+        int rowBytes = frame.Width * CapturedFrame.BytesPerPixel;
+        byte[] tight = TightRows.Rent(rowBytes * frame.Height);
+
+        try
+        {
+            // CopyFromBuffer wants exactly one row after another, so any capture
+            // padding has to come out here.
+            for (int row = 0; row < frame.Height; row++)
+            {
+                Buffer.BlockCopy(frame.Pixels, row * frame.Stride, tight, row * rowBytes, rowBytes);
+            }
+
+            using var writer = new Windows.Storage.Streams.DataWriter();
+            writer.WriteBytes(tight);
+
+            var bitmap = new SoftwareBitmap(
+                BitmapPixelFormat.Bgra8,
+                frame.Width,
+                frame.Height,
+                BitmapAlphaMode.Premultiplied);
+
+            bitmap.CopyFromBuffer(writer.DetachBuffer());
+            return bitmap;
+        }
+        finally
+        {
+            TightRows.Return(tight);
+        }
+    }
+}
+
+/// <summary>
+/// Reads captured bitmaps into managed frames, holding on to the one WinRT
+/// buffer it copies through.
+///
+/// The buffer is the reason this is an object rather than another static
+/// method. A fresh Windows.Storage.Streams.Buffer per frame is 8 MB of native
+/// memory that the GC cannot see, so nothing about allocating it creates any
+/// pressure to collect the small managed wrapper that owns it - the app grew
+/// past ten gigabytes in under two minutes doing exactly that. One buffer,
+/// reused until the capture size changes, has no such cliff.
+/// </summary>
+internal sealed class FrameReader
+{
+    private readonly object _gate = new();
+    private readonly ExactSizeBufferPool _pixelPool = new();
+
+    private Windows.Storage.Streams.Buffer? _buffer;
+    private uint _capacity;
+
+    public CapturedFrame ToFrame(SoftwareBitmap bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
@@ -220,29 +282,43 @@ internal static class SoftwareBitmapInterop
         {
             int width = source.PixelWidth;
             int height = source.PixelHeight;
+            int needed = width * height * CapturedFrame.BytesPerPixel;
 
-            var buffer = new Windows.Storage.Streams.Buffer(
-                (uint)(width * height * CapturedFrame.BytesPerPixel));
-
-            source.CopyToBuffer(buffer);
-
-            if (buffer.Length == 0)
+            lock (_gate)
             {
-                buffer.Length = buffer.Capacity;
+                Windows.Storage.Streams.Buffer buffer = RentBuffer((uint)needed);
+
+                source.CopyToBuffer(buffer);
+
+                // CopyToBuffer does not always set Length, and a reused buffer is
+                // often larger than this frame. Either way the reader has to see
+                // at least the frame's worth of bytes to hand them over.
+                if (buffer.Length < (uint)needed)
+                {
+                    buffer.Length = (uint)needed;
+                }
+
+                byte[] pixels = _pixelPool.Rent(needed);
+
+                try
+                {
+                    using var reader = Windows.Storage.Streams.DataReader.FromBuffer(buffer);
+                    reader.ReadBytes(pixels);
+                }
+                catch
+                {
+                    _pixelPool.Return(pixels);
+                    throw;
+                }
+
+                // Rows are tightly packed: the buffer holds exactly one frame.
+                return CapturedFrame.Adopt(
+                    pixels,
+                    width,
+                    height,
+                    width * CapturedFrame.BytesPerPixel,
+                    _pixelPool.Return);
             }
-
-            var pixels = new byte[buffer.Length];
-
-            using (var reader = Windows.Storage.Streams.DataReader.FromBuffer(buffer))
-            {
-                reader.ReadBytes(pixels);
-            }
-
-            // Derive the stride from what actually arrived rather than assuming
-            // rows are tightly packed.
-            int stride = height > 0 ? pixels.Length / height : width * CapturedFrame.BytesPerPixel;
-
-            return new CapturedFrame(pixels, width, height, stride);
         }
         finally
         {
@@ -250,30 +326,27 @@ internal static class SoftwareBitmapInterop
         }
     }
 
-    public static SoftwareBitmap ToSoftwareBitmap(CapturedFrame frame)
+    /// <summary>Lets go of both buffers, for when capture stops.</summary>
+    public void Clear()
     {
-        ArgumentNullException.ThrowIfNull(frame);
-
-        int rowBytes = frame.Width * CapturedFrame.BytesPerPixel;
-        var tight = new byte[rowBytes * frame.Height];
-
-        // CopyFromBuffer wants exactly one row after another, so any capture
-        // padding has to come out here.
-        for (int row = 0; row < frame.Height; row++)
+        lock (_gate)
         {
-            Buffer.BlockCopy(frame.Pixels, row * frame.Stride, tight, row * rowBytes, rowBytes);
+            _buffer = null;
+            _capacity = 0;
+            _pixelPool.Clear();
+        }
+    }
+
+    private Windows.Storage.Streams.Buffer RentBuffer(uint needed)
+    {
+        if (_buffer is null || _capacity < needed)
+        {
+            // Only grows: a game that goes windowed and back should not pay for
+            // a new buffer each way.
+            _buffer = new Windows.Storage.Streams.Buffer(needed);
+            _capacity = needed;
         }
 
-        using var writer = new Windows.Storage.Streams.DataWriter();
-        writer.WriteBytes(tight);
-
-        var bitmap = new SoftwareBitmap(
-            BitmapPixelFormat.Bgra8,
-            frame.Width,
-            frame.Height,
-            BitmapAlphaMode.Premultiplied);
-
-        bitmap.CopyFromBuffer(writer.DetachBuffer());
-        return bitmap;
+        return _buffer;
     }
 }

@@ -29,6 +29,13 @@ public sealed class PipelineMetrics
     public long TranslationsIssued { get; private set; }
 
     /// <summary>
+    /// How often frames are being pulled right now. It moves on its own - the
+    /// pipeline slows down while the screen is quiet - so seeing it makes the
+    /// difference between "idling" and "stuck" obvious.
+    /// </summary>
+    public int PollIntervalMilliseconds { get; set; }
+
+    /// <summary>
     /// The number that says whether change detection is doing its job. Anything
     /// below roughly 0.8 during normal play means regions are picking up animated
     /// scenery and OCR is running far more often than it needs to.
@@ -75,6 +82,7 @@ public sealed class PipelineMetrics
             LastCaptureMs = LastOcrMs = LastTranslateMs = 0;
             AverageOcrMs = AverageTranslateMs = 0;
             FramesExamined = FramesSkipped = TranslationsIssued = 0;
+            PollIntervalMilliseconds = 0;
         }
     }
 

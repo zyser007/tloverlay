@@ -197,8 +197,8 @@ public static class ImagePreprocessor
 
     private static CapturedFrame FromLuma(byte[] luma, int width, int height)
     {
-        int stride = width * CapturedFrame.BytesPerPixel;
-        var pixels = new byte[stride * height];
+        CapturedFrame frame = CapturedFrame.Rent(width, height, out byte[] pixels);
+        int stride = frame.Stride;
 
         for (int y = 0; y < height; y++)
         {
@@ -213,7 +213,7 @@ public static class ImagePreprocessor
             }
         }
 
-        return new CapturedFrame(pixels, width, height, stride);
+        return frame;
     }
 
     /// <summary>
@@ -224,8 +224,9 @@ public static class ImagePreprocessor
     {
         int newWidth = Math.Max(1, (int)Math.Round(width * scale));
         int newHeight = Math.Max(1, (int)Math.Round(height * scale));
-        int stride = newWidth * CapturedFrame.BytesPerPixel;
-        var pixels = new byte[stride * newHeight];
+
+        CapturedFrame frame = CapturedFrame.Rent(newWidth, newHeight, out byte[] pixels);
+        int stride = frame.Stride;
 
         for (int y = 0; y < newHeight; y++)
         {
@@ -255,6 +256,6 @@ public static class ImagePreprocessor
             }
         }
 
-        return new CapturedFrame(pixels, newWidth, newHeight, stride);
+        return frame;
     }
 }

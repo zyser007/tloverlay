@@ -122,12 +122,50 @@ public partial class SetupWindow : Window
                 ? $"พื้นที่ว่าง {FormatBytes(free.Value)} — อาจไม่พอสำหรับโมเดลที่เลือก ({FormatBytes(needed)})"
                 : $"พื้นที่ว่าง {FormatBytes(free.Value)}";
 
+        UpdateMemoryAdvice();
+
         LogHint.Text = $"ถ้าดาวน์โหลดไม่สำเร็จ ดูรายละเอียดได้ที่ {AppPaths.LogsDirectory}";
 
         OfflineUrls.Text = string.Join(
             Environment.NewLine + Environment.NewLine,
             (SelectedModel?.Url.ToString() ?? "(ยังไม่ได้ระบุ URL)") + Environment.NewLine + "  →  " + ModelTarget,
             "https://github.com/ggml-org/llama.cpp/releases/latest" + Environment.NewLine + "  →  " + ServerTarget);
+    }
+
+    /// <summary>
+    /// Says whether the selected model fits this machine.
+    ///
+    /// Sizing a model is the one decision here a player cannot undo cheaply -
+    /// getting it wrong costs a multi-gigabyte download and then a game that
+    /// stutters - so the machine's own number goes next to the model's, at the
+    /// moment of choosing.
+    /// </summary>
+    private void UpdateMemoryAdvice()
+    {
+        ModelEntry? model = SelectedModel;
+
+        if (model is null || model.ApproximateRamBytes == 0)
+        {
+            ModelRamText.Text = string.Empty;
+            return;
+        }
+
+        string needs = $"ใช้แรมประมาณ {MemoryReadout.Format(model.ApproximateRamBytes)} ขณะแปล";
+        long machine = MemoryReadout.MachineBytes;
+
+        if (machine == 0)
+        {
+            ModelRamText.Text = needs;
+            return;
+        }
+
+        // The game is the other tenant, and it is usually the larger one. Four
+        // gigabytes of headroom is a modest game plus Windows itself.
+        const long Headroom = 4L * 1024 * 1024 * 1024;
+
+        ModelRamText.Text = machine < model.ApproximateRamBytes + Headroom
+            ? $"{needs} — เครื่องนี้มีแรม {MemoryReadout.Format(machine)} อาจไม่พอเมื่อเปิดเกมพร้อมกัน ลองเลือกรุ่นเล็กลง"
+            : $"{needs} · เครื่องนี้มีแรม {MemoryReadout.Format(machine)}";
     }
 
     /// <summary>Green for present, amber for missing, both readable on the light surface.</summary>

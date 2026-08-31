@@ -154,13 +154,18 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private async Task RunAsync(CancellationToken cancellationToken)
     {
         var stopwatch = new Stopwatch();
+        var schedule = new PollSchedule(_profile.PollIntervalMilliseconds);
 
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
                 stopwatch.Restart();
-                CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
+
+                // Disposed at the end of every iteration: the frame's buffer goes
+                // back to the pool it came from, which is what keeps a long
+                // session from growing without limit.
+                using CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
                 double captureMs = stopwatch.Elapsed.TotalMilliseconds;
 
                 if (frame is null)
@@ -173,7 +178,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
                     // A frame that never arrived. Poll again rather than treating
                     // one empty grab as the end of the session.
-                    await Task.Delay(_profile.PollIntervalMilliseconds, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(schedule.Next(sawChange: false), cancellationToken).ConfigureAwait(false);
                     continue;
                 }
 
@@ -189,8 +194,9 @@ public sealed class TranslationPipeline : IAsyncDisposable
                 }
 
                 Metrics.RecordFrame(captureMs, skipped: !anyWork);
+                Metrics.PollIntervalMilliseconds = schedule.CurrentIntervalMilliseconds;
 
-                await Task.Delay(_profile.PollIntervalMilliseconds, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(schedule.Next(anyWork), cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -218,7 +224,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
+        using CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
 
         if (frame is null)
         {
@@ -254,18 +260,26 @@ public sealed class TranslationPipeline : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         var (x, y, width, height) = state.Region.ToPixels(frame.Width, frame.Height);
-        CapturedFrame crop = frame.Crop(x, y, width, height);
 
-        ChangeState change = state.Detector.Observe(crop.Signature(), DateTimeOffset.UtcNow);
+        var stopwatch = new Stopwatch();
+        OcrResult recognized;
 
-        if (!force && change != ChangeState.Settled)
+        // Scoped tightly on purpose: translation can take seconds, and holding a
+        // region-sized buffer out of the pool for all of it is exactly the kind
+        // of thing that adds up.
+        using (CapturedFrame crop = frame.Crop(x, y, width, height))
         {
-            return false;
-        }
+            ChangeState change = state.Detector.Observe(crop.Signature(), DateTimeOffset.UtcNow);
 
-        var stopwatch = Stopwatch.StartNew();
-        OcrResult recognized = await _ocr.RecognizeAsync(crop, cancellationToken).ConfigureAwait(false);
-        Metrics.RecordOcr(stopwatch.Elapsed.TotalMilliseconds);
+            if (!force && change != ChangeState.Settled)
+            {
+                return false;
+            }
+
+            stopwatch.Restart();
+            recognized = await _ocr.RecognizeAsync(crop, cancellationToken).ConfigureAwait(false);
+            Metrics.RecordOcr(stopwatch.Elapsed.TotalMilliseconds);
+        }
 
         string sourceText = TextAssembler.Assemble(recognized);
 

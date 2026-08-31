@@ -9,6 +9,31 @@
     <ApplicationIcon>Assets\tloverlay.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!--
+    Garbage collection, tuned for what this app is: a background process sitting
+    next to a game that wants every megabyte and every core.
+
+    Workstation and concurrent are already the defaults for a desktop app, but
+    they are stated here because getting server GC by accident (a stray
+    runtimeconfig, a future SDK default) would give every core its own heap and
+    multiply the footprint. RetainVM off returns segments to the OS instead of
+    holding them for reuse we do not need.
+  -->
+  <PropertyGroup>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Trades a little CPU for a smaller heap. The right trade here: the app is
+      idle most of the time, and the memory it is not using is memory the game
+      can have.
+    -->
+    <RuntimeHostConfigurationOption Include="System.GC.Conserve" Value="5" />
+  </ItemGroup>
+
   <ItemGroup>
     <!--
       Embedded as a resource as well as set as the application icon. WPF does

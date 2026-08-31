@@ -417,17 +417,29 @@ public partial class ControlPanelWindow : Window
 
     private void UpdateMetrics()
     {
+        // Memory is worth showing even before a session starts - it is what
+        // tells a player on a small machine whether the model fits.
+        string memory = $"แรม แอป {MemoryReadout.Format(MemoryReadout.AppBytes)}";
+
+        long server = MemoryReadout.ModelServerBytes;
+        if (server > 0)
+        {
+            memory += $" · โมเดล {MemoryReadout.Format(server)}";
+        }
+
         var metrics = _session?.Metrics;
 
         if (metrics is null || metrics.FramesExamined == 0)
         {
-            MetricsText.Text = string.Empty;
+            MetricsText.Text = memory;
             return;
         }
 
         MetricsText.Text =
             $"OCR {metrics.AverageOcrMs:F0} ms · แปล {metrics.AverageTranslateMs:F0} ms · " +
-            $"ข้ามเฟรม {metrics.SkipRatio:P0} · แปลไปแล้ว {metrics.TranslationsIssued} ประโยค";
+            $"ข้ามเฟรม {metrics.SkipRatio:P0} · แปลไปแล้ว {metrics.TranslationsIssued} ประโยค" +
+            Environment.NewLine +
+            $"{memory} · ดึงภาพทุก {metrics.PollIntervalMilliseconds} ms";
     }
 
     private void OnSetupClick(object sender, RoutedEventArgs e)

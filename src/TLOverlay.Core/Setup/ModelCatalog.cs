@@ -23,6 +23,19 @@ public sealed record ModelEntry(
     public double ApproximateGigabytes => ApproximateBytes / 1024d / 1024d / 1024d;
 
     /// <summary>
+    /// Roughly how much memory the model server needs to run this model.
+    ///
+    /// An estimate, and honestly so: llama.cpp memory-maps the weights, so the
+    /// operating system can drop pages under pressure and the number in Task
+    /// Manager is usually lower than this. But a machine that has to keep
+    /// dropping and re-reading them translates at disk speed, which is not worth
+    /// having. The headroom covers the context cache and the compute buffers.
+    /// </summary>
+    public long ApproximateRamBytes => ApproximateBytes == 0
+        ? 0
+        : ApproximateBytes + (400L * 1024 * 1024);
+
+    /// <summary>
     /// One line fit for the model dropdown. Licence is on it deliberately: the
     /// player should see that a model is non-commercial while choosing it, not
     /// after two gigabytes have finished downloading.
@@ -30,6 +43,7 @@ public sealed record ModelEntry(
     public string Summary => ApproximateBytes > 0
         ? $"{DisplayName} · {ApproximateGigabytes:F1} GB · {Notes}"
         : $"{DisplayName} · {Notes}";
+
 }
 
 /// <summary>The models offered in Setup.</summary>
@@ -53,6 +67,15 @@ public static class ModelCatalog
             "Gemma Terms of Use",
             CommercialUseAllowed: true,
             "เล็กและเร็ว เหมาะกับรันบน CPU"),
+
+        new ModelEntry(
+            "gemma3-1b-q4km",
+            "Gemma 3 1B Instruct (Q4_K_M)",
+            new Uri("https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf"),
+            806_058_272,
+            "Gemma Terms of Use",
+            CommercialUseAllowed: true,
+            "สำหรับเครื่องแรมน้อย (8 GB) — เล็กและเร็วที่สุด แต่แปลหยาบกว่ารุ่น 4B"),
 
         new ModelEntry(
             "gemma3-4b-qat-q4",

@@ -18,6 +18,12 @@ public sealed class WgcCaptureSource : ICaptureSource
 {
     private readonly object _gate = new();
 
+    /// <summary>
+    /// Holds the buffers every frame is copied through, so a session's memory
+    /// use is flat rather than proportional to how long it has been running.
+    /// </summary>
+    private readonly FrameReader _reader = new();
+
     private IDirect3DDevice? _device;
     private GraphicsCaptureItem? _item;
     private Direct3D11CaptureFramePool? _framePool;
@@ -189,7 +195,7 @@ public sealed class WgcCaptureSource : ICaptureSource
         _ = CompleteGrabAsync(frame, pending);
     }
 
-    private static async Task CompleteGrabAsync(
+    private async Task CompleteGrabAsync(
         Direct3D11CaptureFrame frame,
         TaskCompletionSource<CapturedFrame?> completion)
     {
@@ -200,7 +206,7 @@ public sealed class WgcCaptureSource : ICaptureSource
                 using SoftwareBitmap bitmap = await SoftwareBitmap
                     .CreateCopyFromSurfaceAsync(frame.Surface, BitmapAlphaMode.Premultiplied);
 
-                completion.TrySetResult(SoftwareBitmapInterop.ToFrame(bitmap));
+                completion.TrySetResult(_reader.ToFrame(bitmap));
             }
         }
         catch (Exception ex)
@@ -246,6 +252,9 @@ public sealed class WgcCaptureSource : ICaptureSource
 
         _device?.Dispose();
         _device = null;
+
+        // Several megabytes that a stopped session has no use for.
+        _reader.Clear();
     }
 
     public void Dispose()

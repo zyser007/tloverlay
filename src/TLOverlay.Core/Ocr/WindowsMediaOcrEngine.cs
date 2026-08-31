@@ -78,7 +78,9 @@ public sealed class WindowsMediaOcrEngine : IOcrEngine
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        CapturedFrame prepared = ImagePreprocessor.Prepare(frame, _preprocess);
+        // Prepare always builds a new frame, so this owns it - and its buffer is
+        // pooled, so giving it back promptly is the point.
+        using CapturedFrame prepared = ImagePreprocessor.Prepare(frame, _preprocess);
 
         // Everything downstream wants coordinates in the caller's frame, so undo
         // whatever scaling preprocessing applied.

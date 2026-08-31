@@ -201,9 +201,33 @@ average OCR and translation time plus the frame skip ratio, which is the number
 that tells you whether change detection is doing its job - below roughly 80%
 during play means a region is picking up animated scenery.
 
-Not built yet: snip-once translation (`Ctrl+Alt+S` reports this), the NLLB ONNX
-backend as a lighter alternative to the local LLM, and automatic region
-detection.
+Not built yet: the NLLB ONNX backend as a lighter alternative to the local LLM,
+automatic region detection, and in-app updates.
+
+## Memory
+
+Two processes, and they are worth understanding separately.
+
+**The app** should sit at roughly 150-250 MB and stay there. It is flat by
+construction: a 1080p frame is 8 MB and several are pulled every second, so every
+frame buffer is rented from a pool and returned rather than allocated. Frames go
+through one WinRT buffer that is reused until the capture size changes - a fresh
+one per frame is native memory the GC cannot see, so nothing about allocating it
+creates any pressure to collect the wrapper that owns it. Getting that wrong once
+took the app past 10 GB inside two minutes.
+
+Polling backs off on its own. Eight frames a second is right while dialogue is
+moving and pure waste in a menu, so after a quiet stretch the interval doubles up
+to half a second, and returns to full rate on the first change. The control panel
+shows the current interval next to the memory figures.
+
+**The model server** needs roughly the model's file size plus a few hundred
+megabytes. That is the number that decides which model a machine can run, so
+Setup shows it beside each model along with the machine's own RAM, and says so
+plainly when the two do not leave room for a game. On 8 GB, use Gemma 3 1B.
+
+If the app's figure climbs steadily during a session, that is a bug - the
+readout is on the panel so it can be reported with a number.
 
 ## Known limits
 

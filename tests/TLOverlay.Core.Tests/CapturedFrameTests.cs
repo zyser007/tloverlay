@@ -83,4 +83,55 @@ public class CapturedFrameTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new CapturedFrame(new byte[4096], 32, 32, 64));
     }
+
+    [Fact]
+    public void ARentedFrameGivesItsBufferBackWhenDisposed()
+    {
+        var returned = new List<byte[]>();
+        var buffer = new byte[64 * 4];
+
+        var frame = CapturedFrame.Adopt(buffer, 8, 8, 32, returned.Add);
+
+        frame.Dispose();
+        frame.Dispose();
+
+        // Twice disposed, returned once: handing the same array to a pool twice
+        // is how two frames end up sharing one buffer.
+        Assert.Same(buffer, Assert.Single(returned));
+    }
+
+    [Fact]
+    public void ADisposedFrameRefusesToHandOutItsPixels()
+    {
+        var frame = CapturedFrame.Adopt(new byte[64 * 4], 8, 8, 32, null);
+        frame.Dispose();
+
+        // Loudly, rather than quietly serving up a buffer that now belongs to
+        // whoever rented it next - that would surface as garbled OCR much later.
+        Assert.Throws<ObjectDisposedException>(() => frame.Pixels);
+    }
+
+    [Fact]
+    public void CroppingIntoAPooledBufferStillCopiesTheRightPixels()
+    {
+        using CapturedFrame source = Gradient(64, 64);
+
+        // A pooled buffer is longer than the crop and carries whatever the last
+        // tenant left in it, so the copy has to be driven by stride and height.
+        using CapturedFrame crop = source.Crop(10, 20, 4, 3);
+
+        Assert.Equal(4, crop.Width);
+        Assert.Equal(3, crop.Height);
+        Assert.Equal(16, crop.Stride);
+
+        for (int y = 0; y < crop.Height; y++)
+        {
+            for (int x = 0; x < crop.Width; x++)
+            {
+                int p = (y * crop.Stride) + (x * CapturedFrame.BytesPerPixel);
+                Assert.Equal((byte)(10 + x), crop.Pixels[p]);
+                Assert.Equal((byte)(20 + y), crop.Pixels[p + 1]);
+            }
+        }
+    }
 }

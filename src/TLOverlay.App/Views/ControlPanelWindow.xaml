@@ -51,6 +51,7 @@
       <StackPanel>
         <TextBlock x:Name="StatusText" TextWrapping="Wrap" />
         <TextBlock x:Name="MetricsText"
+                   TextWrapping="Wrap"
                    Foreground="{StaticResource PanelMuted}"
                    FontFamily="{StaticResource MonoFont}"
                    FontSize="12"

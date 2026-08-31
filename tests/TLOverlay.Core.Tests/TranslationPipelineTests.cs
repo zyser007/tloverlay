@@ -115,10 +115,55 @@ public class TranslationPipelineTests
         Assert.False(pipeline.IsRunning);
     }
 
+    [Fact]
+    public async Task EveryFrameThePipelineTakesIsGivenBack()
+    {
+        var capture = new FakeCaptureSource();
+
+        await using var pipeline = new TranslationPipeline(capture, new FakeOcrEngine("Hello there."), new FakeTranslator());
+
+        await pipeline.StartAsync(new IntPtr(1), Profile());
+        await capture.ServeAsync(6);
+        await pipeline.StopAsync();
+
+        // The leak that took the app past ten gigabytes was exactly this: frames
+        // handed out and never released. One or two may still be in flight when
+        // the loop stops, so this asserts the loop is not accumulating them.
+        Assert.True(
+            capture.Outstanding <= 1,
+            $"{capture.Outstanding} of {capture.Issued} frames were never disposed.");
+    }
+
+    [Fact]
+    public async Task AnOnDemandTranslationReleasesItsFrameToo()
+    {
+        var capture = new FakeCaptureSource();
+
+        await using var pipeline = new TranslationPipeline(capture, new FakeOcrEngine("Hello there."), new FakeTranslator())
+        {
+            AutomaticTranslation = false,
+        };
+
+        await pipeline.StartAsync(new IntPtr(1), Profile());
+
+        for (int press = 0; press < 5; press++)
+        {
+            await pipeline.TranslateOnceAsync();
+        }
+
+        await pipeline.StopAsync();
+
+        Assert.True(
+            capture.Outstanding <= 1,
+            $"{capture.Outstanding} of {capture.Issued} frames were never disposed.");
+    }
+
     /// <summary>Hands out identical frames, and counts how many were asked for.</summary>
     private sealed class FakeCaptureSource : ICaptureSource
     {
         private int _grabs;
+        private int _issued;
+        private int _disposed;
 
         public bool IsRunning { get; private set; }
 
@@ -146,9 +191,19 @@ public class TranslationPipelineTests
             const int Width = 640;
             const int Height = 360;
 
-            return Task.FromResult<CapturedFrame?>(
-                new CapturedFrame(new byte[Width * Height * CapturedFrame.BytesPerPixel], Width, Height, Width * CapturedFrame.BytesPerPixel));
+            Interlocked.Increment(ref _issued);
+
+            return Task.FromResult<CapturedFrame?>(CapturedFrame.Adopt(
+                new byte[Width * Height * CapturedFrame.BytesPerPixel],
+                Width,
+                Height,
+                Width * CapturedFrame.BytesPerPixel,
+                _ => Interlocked.Increment(ref _disposed)));
         }
+
+        public int Issued => Volatile.Read(ref _issued);
+
+        public int Outstanding => Volatile.Read(ref _issued) - Volatile.Read(ref _disposed);
 
         /// <summary>Waits until the loop has asked for at least this many frames.</summary>
         public async Task ServeAsync(int frames)
