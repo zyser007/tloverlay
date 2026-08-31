@@ -31,7 +31,8 @@ public sealed class TranslationSession : IAsyncDisposable
     private WindowsMediaOcrEngine? _ocr;
     private GameWindow? _target;
     private bool _translationsVisible = true;
-    private bool _regionOutlinesVisible;
+    private bool _clickThrough = true;
+    private bool _regionVisible;
     private bool _disposed;
 
     public TranslationSession(TranslatorSettings settings, Dispatcher? dispatcher = null)
@@ -89,7 +90,9 @@ public sealed class TranslationSession : IAsyncDisposable
         _overlay.Show();
         _overlay.Attach(target.Handle, profile);
         _overlay.SetTranslationsVisible(_translationsVisible);
-        _overlay.SetRegionOutlinesVisible(_regionOutlinesVisible);
+        _overlay.SetRegionVisible(_regionVisible);
+        _overlay.SetClickThrough(_clickThrough);
+        _overlay.PanelPlacementChanged += OnPanelPlacementChanged;
 
         if (!_overlay.IsHiddenFromCapture)
         {
@@ -121,7 +124,7 @@ public sealed class TranslationSession : IAsyncDisposable
 
     public bool TranslationsVisible => _translationsVisible;
 
-    public bool RegionOutlinesVisible => _regionOutlinesVisible;
+    public bool RegionVisible => _regionVisible;
 
     /// <summary>
     /// The two layers toggle independently. Held on the session rather than only
@@ -134,13 +137,22 @@ public sealed class TranslationSession : IAsyncDisposable
         _overlay?.SetTranslationsVisible(visible);
     }
 
-    public void SetRegionOutlinesVisible(bool visible)
+    public void SetRegionVisible(bool visible)
     {
-        _regionOutlinesVisible = visible;
-        _overlay?.SetRegionOutlinesVisible(visible);
+        _regionVisible = visible;
+        _overlay?.SetRegionVisible(visible);
     }
 
-    public void SetClickThrough(bool clickThrough) => _overlay?.SetClickThrough(clickThrough);
+    /// <summary>Puts the translation panel back where the display mode says.</summary>
+    public void ResetPanelPlacement() => _overlay?.ResetPanelPlacement();
+
+    public bool ClickThrough => _clickThrough;
+
+    public void SetClickThrough(bool clickThrough)
+    {
+        _clickThrough = clickThrough;
+        _overlay?.SetClickThrough(clickThrough);
+    }
 
     public async Task StopAsync()
     {
@@ -170,6 +182,7 @@ public sealed class TranslationSession : IAsyncDisposable
 
         if (_overlay is not null)
         {
+            _overlay.PanelPlacementChanged -= OnPanelPlacementChanged;
             _overlay.Close();
             _overlay = null;
         }
@@ -181,7 +194,13 @@ public sealed class TranslationSession : IAsyncDisposable
         _ = _dispatcher.InvokeAsync(() => _overlay?.ShowTranslation(translation));
 
     private void OnTextCleared(object? sender, RegionCleared cleared) =>
-        _ = _dispatcher.InvokeAsync(() => _overlay?.ClearRegion(cleared.RegionName));
+        _ = _dispatcher.InvokeAsync(() => _overlay?.ClearText());
+
+    /// <summary>Raised after a drag so the caller can write it into the profile.</summary>
+    public event EventHandler<RelativeRect>? PanelPlacementChanged;
+
+    private void OnPanelPlacementChanged(object? sender, RelativeRect placement) =>
+        PanelPlacementChanged?.Invoke(this, placement);
 
     private void OnForegroundChanged(object? sender, bool isGameForeground) =>
         _ = _dispatcher.InvokeAsync(() =>

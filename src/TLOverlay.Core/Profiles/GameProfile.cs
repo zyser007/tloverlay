@@ -17,47 +17,17 @@ public enum OverlayDisplayMode
 ///
 /// Relative rather than absolute on purpose: the player changes resolution,
 /// drags the game to a different monitor, or plays windowed at an odd size, and
-/// the dialogue box stays in the same relative place every time.
+/// both the capture region and the translation panel stay where they were put.
 /// </summary>
-public sealed record CaptureRegion(string Name, double X, double Y, double Width, double Height)
+public sealed record RelativeRect(double X, double Y, double Width, double Height)
 {
-    public static CaptureRegion BottomDialogue { get; } = new("Dialogue", 0.15, 0.72, 0.70, 0.22);
-
-    /// <summary>
-    /// Picks a name not already taken. Regions are addressed by name across the
-    /// pipeline and the overlay, so two sharing one would have their detectors
-    /// and their on-screen panels collide.
-    /// </summary>
-    public static string UniqueName(IEnumerable<string> existing, string baseName = "Dialogue")
-    {
-        ArgumentNullException.ThrowIfNull(existing);
-
-        var taken = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
-
-        if (!taken.Contains(baseName))
-        {
-            return baseName;
-        }
-
-        for (int suffix = 2; suffix < 1000; suffix++)
-        {
-            string candidate = $"{baseName} {suffix}";
-            if (!taken.Contains(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return $"{baseName} {Guid.NewGuid():N}";
-    }
-
     public bool IsValid =>
         Width > 0 && Height > 0
         && X >= 0 && Y >= 0
         && X + Width <= 1.0001
         && Y + Height <= 1.0001;
 
-    /// <summary>Projects onto a game window of the given pixel size.</summary>
+    /// <summary>Projects onto a window of the given pixel size.</summary>
     public (int X, int Y, int Width, int Height) ToPixels(int windowWidth, int windowHeight)
     {
         int x = (int)Math.Round(X * windowWidth);
@@ -65,8 +35,8 @@ public sealed record CaptureRegion(string Name, double X, double Y, double Width
         int w = (int)Math.Round(Width * windowWidth);
         int h = (int)Math.Round(Height * windowHeight);
 
-        // Clamp so a region saved at a slightly different aspect ratio can never
-        // produce an out-of-bounds crop.
+        // Clamp so a rectangle saved at a slightly different aspect ratio can
+        // never produce an out-of-bounds crop.
         x = Math.Clamp(x, 0, Math.Max(0, windowWidth - 1));
         y = Math.Clamp(y, 0, Math.Max(0, windowHeight - 1));
         w = Math.Clamp(w, 1, windowWidth - x);
@@ -74,6 +44,43 @@ public sealed record CaptureRegion(string Name, double X, double Y, double Width
 
         return (x, y, w, h);
     }
+
+    /// <summary>
+    /// Keeps a dragged or resized rectangle inside the window and above a
+    /// usable minimum, so a panel can never be shoved off-screen or collapsed to
+    /// nothing and become impossible to grab again.
+    /// </summary>
+    public RelativeRect Clamped(double minimumSize = 0.05)
+    {
+        double width = Math.Clamp(Width, minimumSize, 1);
+        double height = Math.Clamp(Height, minimumSize, 1);
+
+        return new RelativeRect(
+            Math.Clamp(X, 0, 1 - width),
+            Math.Clamp(Y, 0, 1 - height),
+            width,
+            height);
+    }
+}
+
+/// <summary>The area of the game window the pipeline reads text from.</summary>
+public sealed record CaptureRegion(string Name, double X, double Y, double Width, double Height)
+{
+    /// <summary>There is exactly one region per profile, and this is its name.</summary>
+    public const string DefaultName = "Dialogue";
+
+    public static CaptureRegion BottomDialogue { get; } = new(DefaultName, 0.15, 0.72, 0.70, 0.22);
+
+    public RelativeRect Bounds => new(X, Y, Width, Height);
+
+    public bool IsValid => Bounds.IsValid;
+
+    public static CaptureRegion FromBounds(RelativeRect bounds, string name = DefaultName) =>
+        new(name, bounds.X, bounds.Y, bounds.Width, bounds.Height);
+
+    /// <summary>Projects onto a game window of the given pixel size.</summary>
+    public (int X, int Y, int Width, int Height) ToPixels(int windowWidth, int windowHeight) =>
+        Bounds.ToPixels(windowWidth, windowHeight);
 }
 
 public sealed class GameProfile
@@ -86,7 +93,21 @@ public sealed class GameProfile
     /// <summary>Substring match against the window title, for launchers that share an executable.</summary>
     public string? WindowTitleContains { get; set; }
 
+    /// <summary>
+    /// Still a list, because that is what the pipeline and the saved profiles
+    /// already speak, but the UI edits exactly one. Several regions turned out to
+    /// be more configuration than the job needs.
+    /// </summary>
     public List<CaptureRegion> Regions { get; set; } = [CaptureRegion.BottomDialogue];
+
+    /// <summary>
+    /// Where the player dragged the translation panel, if they did.
+    ///
+    /// Null means "lay it out from <see cref="DisplayMode"/>". Once set, the
+    /// manual placement wins: a panel that snapped back on the next line would
+    /// make dragging feel broken.
+    /// </summary>
+    public RelativeRect? PanelBounds { get; set; }
 
     public OverlayDisplayMode DisplayMode { get; set; } = OverlayDisplayMode.Subtitle;
 
@@ -102,6 +123,15 @@ public sealed class GameProfile
     public int PollIntervalMilliseconds { get; set; } = 120;
 
     public List<GlossaryTerm> Glossary { get; set; } = [];
+
+    /// <summary>The one capture region, or null when none has been drawn yet.</summary>
+    public CaptureRegion? Region => Regions.FirstOrDefault(static r => r.IsValid);
+
+    /// <summary>Replaces the capture region, keeping the list to a single entry.</summary>
+    public void SetRegion(CaptureRegion? region)
+    {
+        Regions = region is null ? [] : [region with { Name = CaptureRegion.DefaultName }];
+    }
 
     public static GameProfile CreateDefault(string name) => new() { Name = name };
 }

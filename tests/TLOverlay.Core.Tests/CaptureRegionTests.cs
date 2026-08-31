@@ -55,29 +55,64 @@ public class CaptureRegionTests
     }
 
     [Fact]
-    public void FirstRegionKeepsThePlainName()
+    public void ClampKeepsADraggedPanelInsideTheWindow()
     {
-        Assert.Equal("Dialogue", CaptureRegion.UniqueName([]));
+        // Dragging the panel past the right edge must not leave it somewhere the
+        // player can no longer grab it.
+        var clamped = new RelativeRect(0.9, 0.9, 0.4, 0.3).Clamped();
+
+        Assert.True(clamped.X + clamped.Width <= 1.0001);
+        Assert.True(clamped.Y + clamped.Height <= 1.0001);
     }
 
     [Fact]
-    public void LaterRegionsAreNumberedRatherThanColliding()
+    public void ClampRefusesToCollapseAPanelToNothing()
     {
-        // Regions are addressed by name by both the pipeline and the overlay, so
-        // a duplicate would make two of them share one detector and one panel.
-        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["Dialogue"]));
-        Assert.Equal("Dialogue 3", CaptureRegion.UniqueName(["Dialogue", "Dialogue 2"]));
+        var clamped = new RelativeRect(0.5, 0.5, 0.001, 0.001).Clamped(minimumSize: 0.05);
+
+        Assert.Equal(0.05, clamped.Width, precision: 6);
+        Assert.Equal(0.05, clamped.Height, precision: 6);
     }
 
     [Fact]
-    public void GapsInTheNumberingAreReused()
+    public void ClampLeavesAReasonableRectangleAlone()
     {
-        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["Dialogue", "Dialogue 3"]));
+        var original = new RelativeRect(0.2, 0.3, 0.4, 0.2);
+
+        Assert.Equal(original, original.Clamped());
     }
 
     [Fact]
-    public void NameComparisonIgnoresCase()
+    public void SettingTheRegionReplacesRatherThanAppends()
     {
-        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["dialogue"]));
+        // One region per profile: setting a new one must not leave the old.
+        var profile = GameProfile.CreateDefault("Test");
+
+        profile.SetRegion(new CaptureRegion("Whatever", 0.1, 0.1, 0.3, 0.2));
+
+        Assert.Single(profile.Regions);
+        Assert.Equal(CaptureRegion.DefaultName, profile.Regions[0].Name);
+        Assert.Equal(0.1, profile.Region!.X);
+    }
+
+    [Fact]
+    public void ClearingTheRegionLeavesNone()
+    {
+        var profile = GameProfile.CreateDefault("Test");
+
+        profile.SetRegion(null);
+
+        Assert.Empty(profile.Regions);
+        Assert.Null(profile.Region);
+    }
+
+    [Fact]
+    public void AnInvalidStoredRegionIsNotReturned()
+    {
+        // A hand-edited profile should not feed a zero-sized region to the pipeline.
+        var profile = GameProfile.CreateDefault("Test");
+        profile.Regions = [new CaptureRegion("Dialogue", 0.1, 0.1, 0, 0)];
+
+        Assert.Null(profile.Region);
     }
 }

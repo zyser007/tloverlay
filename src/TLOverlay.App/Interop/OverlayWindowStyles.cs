@@ -27,17 +27,19 @@ internal static class OverlayWindowStyles
 
         long style = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
 
-        style |= NativeMethods.WsExLayered
-            | NativeMethods.WsExToolWindow
-            | NativeMethods.WsExNoActivate;
+        style |= NativeMethods.WsExLayered | NativeMethods.WsExToolWindow;
 
         if (clickThrough)
         {
-            style |= NativeMethods.WsExTransparent;
+            style |= NativeMethods.WsExTransparent | NativeMethods.WsExNoActivate;
         }
         else
         {
-            style &= ~NativeMethods.WsExTransparent;
+            // Both come off together. Dropping only WS_EX_TRANSPARENT would let
+            // the window receive clicks but never take focus, and a window that
+            // is never activated does not reliably get the mouse capture that
+            // dragging the panel depends on.
+            style &= ~(NativeMethods.WsExTransparent | NativeMethods.WsExNoActivate);
         }
 
         NativeMethods.SetWindowLongPtr(handle, NativeMethods.GwlExStyle, new IntPtr(style));

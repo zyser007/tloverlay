@@ -4,6 +4,9 @@ using Serilog;
 
 namespace TLOverlay.App.Interop;
 
+/// <summary>One hotkey: what it does, how it is registered, and how it is written.</summary>
+public sealed record HotKeyBinding(HotKeyAction Action, uint Modifiers, Key Key, string Gesture);
+
 public enum HotKeyAction
 {
     ToggleTranslation,
@@ -46,29 +49,36 @@ public sealed class GlobalHotKeyService : IDisposable
     public event EventHandler<HotKeyAction>? Pressed;
 
     /// <summary>
-    /// Registers the default set. Returns the actions that could not be bound,
+    /// The bindings the app registers, and how to write them.
+    ///
+    /// One list, used both to register the keys and to print them in the control
+    /// panel, so the two can never drift into telling the player about a key that
+    /// was never bound.
+    /// </summary>
+    public static IReadOnlyList<HotKeyBinding> Defaults { get; } =
+    [
+        new(HotKeyAction.ToggleTranslation, NativeMethods.ModControl | NativeMethods.ModAlt, Key.T, "Ctrl+Alt+T"),
+        new(HotKeyAction.EditRegions, NativeMethods.ModControl | NativeMethods.ModAlt, Key.R, "Ctrl+Alt+R"),
+        new(HotKeyAction.ToggleTranslations, NativeMethods.ModControl | NativeMethods.ModAlt, Key.H, "Ctrl+Alt+H"),
+        new(HotKeyAction.ToggleRegionOutlines, NativeMethods.ModControl | NativeMethods.ModAlt, Key.G, "Ctrl+Alt+G"),
+        new(HotKeyAction.ToggleClickThrough, NativeMethods.ModControl | NativeMethods.ModAlt, Key.C, "Ctrl+Alt+C"),
+        new(HotKeyAction.TranslateOnce, NativeMethods.ModControl | NativeMethods.ModAlt, Key.S, "Ctrl+Alt+S"),
+    ];
+
+    /// <summary>
+    /// Registers the default set. Returns the bindings that could not be bound,
     /// which happens when another application already owns the combination -
     /// worth telling the player rather than leaving a key that does nothing.
     /// </summary>
-    public IReadOnlyList<HotKeyAction> RegisterDefaults()
+    public IReadOnlyList<HotKeyBinding> RegisterDefaults()
     {
-        var failures = new List<HotKeyAction>();
+        var failures = new List<HotKeyBinding>();
 
-        (HotKeyAction Action, uint Modifiers, Key Key)[] defaults =
-        [
-            (HotKeyAction.ToggleTranslation, NativeMethods.ModControl | NativeMethods.ModAlt, Key.T),
-            (HotKeyAction.TranslateOnce, NativeMethods.ModControl | NativeMethods.ModAlt, Key.S),
-            (HotKeyAction.EditRegions, NativeMethods.ModControl | NativeMethods.ModAlt, Key.R),
-            (HotKeyAction.ToggleTranslations, NativeMethods.ModControl | NativeMethods.ModAlt, Key.H),
-            (HotKeyAction.ToggleRegionOutlines, NativeMethods.ModControl | NativeMethods.ModAlt, Key.G),
-            (HotKeyAction.ToggleClickThrough, NativeMethods.ModControl | NativeMethods.ModAlt, Key.C),
-        ];
-
-        foreach (var (action, modifiers, key) in defaults)
+        foreach (var binding in Defaults)
         {
-            if (!Register(action, modifiers, key))
+            if (!Register(binding.Action, binding.Modifiers, binding.Key))
             {
-                failures.Add(action);
+                failures.Add(binding);
             }
         }
 

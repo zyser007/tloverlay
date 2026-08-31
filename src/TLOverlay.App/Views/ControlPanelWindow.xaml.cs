@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Serilog;
 using TLOverlay.App.Interop;
@@ -12,6 +13,21 @@ namespace TLOverlay.App.Views;
 
 public partial class ControlPanelWindow : Window
 {
+    /// <summary>
+    /// What each hotkey does, in the player's words. Paired with the binding list
+    /// the keys are actually registered from, so the panel cannot advertise a key
+    /// that was never bound.
+    /// </summary>
+    private static readonly Dictionary<HotKeyAction, string> ActionNames = new()
+    {
+        [HotKeyAction.ToggleTranslation] = "เปิด/ปิดการแปล",
+        [HotKeyAction.EditRegions] = "เลือกพื้นที่การแปล",
+        [HotKeyAction.ToggleTranslations] = "ซ่อน/แสดงข้อความแปล",
+        [HotKeyAction.ToggleRegionOutlines] = "ซ่อน/แสดงพื้นที่การแปล",
+        [HotKeyAction.ToggleClickThrough] = "สลับโหมดเมาส์",
+        [HotKeyAction.TranslateOnce] = "แปลครั้งเดียว (ยังไม่พร้อมใช้)",
+    };
+
     private readonly ProfileStore _profiles = new(AppPaths.ProfilesDirectory);
     private readonly AppSettings _settings = SettingsStore.Load(App.DataDirectory);
     private readonly GlobalHotKeyService _hotKeys = new();
@@ -19,7 +35,6 @@ public partial class ControlPanelWindow : Window
 
     private TranslationSession? _session;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
-    private bool _clickThrough = true;
     private bool _busy;
 
     public ControlPanelWindow()
@@ -30,6 +45,9 @@ public partial class ControlPanelWindow : Window
 
         _hotKeys.Pressed += OnHotKey;
         var failed = _hotKeys.RegisterDefaults();
+
+        BuildHotKeyGrid(failed);
+        UpdateMouseModeHint();
 
         _metricsTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -43,13 +61,62 @@ public partial class ControlPanelWindow : Window
 
         if (failed.Count > 0)
         {
-            StatusText.Text = $"คีย์ลัดบางตัวถูกโปรแกรมอื่นใช้อยู่: {string.Join(", ", failed)}";
+            StatusText.Text =
+                "คีย์ลัดบางตัวถูกโปรแกรมอื่นใช้อยู่: " +
+                string.Join(", ", failed.Select(static f => f.Gesture));
         }
     }
 
     public ObservableCollection<GameWindow> Windows { get; } = [];
 
     public GameWindow? SelectedWindow => WindowList.SelectedItem as GameWindow;
+
+    private bool ClickThrough => ClickThroughOption.IsChecked == true;
+
+    /// <summary>
+    /// Prints one row per binding. Unavailable keys are struck through rather
+    /// than hidden, so a key that silently did nothing is visibly accounted for.
+    /// </summary>
+    private void BuildHotKeyGrid(IReadOnlyList<HotKeyBinding> failed)
+    {
+        HotKeyGrid.Children.Clear();
+
+        foreach (var binding in GlobalHotKeyService.Defaults)
+        {
+            bool available = !failed.Contains(binding);
+
+            var keycap = new Border
+            {
+                Style = (Style)FindResource("Keycap"),
+                Child = new TextBlock
+                {
+                    Text = binding.Gesture,
+                    FontFamily = (FontFamily)FindResource("MonoFont"),
+                    FontSize = 11.5,
+                    Foreground = (Brush)FindResource(available ? "PanelForeground" : "PanelMuted"),
+                },
+            };
+
+            var label = new TextBlock
+            {
+                Text = ActionNames.TryGetValue(binding.Action, out string? name) ? name : binding.Action.ToString(),
+                FontSize = 12.5,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = (Brush)FindResource(available ? "PanelForeground" : "PanelMuted"),
+                TextDecorations = available ? null : TextDecorations.Strikethrough,
+            };
+
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 12, 6),
+            };
+
+            row.Children.Add(keycap);
+            row.Children.Add(label);
+            HotKeyGrid.Children.Add(row);
+        }
+    }
 
     private void Refresh()
     {
@@ -86,8 +153,8 @@ public partial class ControlPanelWindow : Window
             return;
         }
 
-        // Load whichever profile matches this game, so regions the player set
-        // earlier come back automatically.
+        // Load whichever profile matches this game, so the area and the panel
+        // placement set earlier come back automatically.
         _profile = ProfileStore.Match(_profiles.LoadAll(), selected.ProcessName, selected.Title)
             ?? GameProfile.CreateDefault(string.IsNullOrWhiteSpace(selected.ProcessName)
                 ? selected.Title
@@ -112,25 +179,23 @@ public partial class ControlPanelWindow : Window
             return;
         }
 
-        // Hand the editor what already exists. It used to open blank and its
-        // result replaced the whole list, so adding a second region meant losing
-        // the first and there was no way to see where the existing one sat.
-        var editor = new RegionEditorWindow(selected.Handle, _profile.Regions) { Owner = this };
+        // Hand the editor the area already set, so a redraw is a deliberate
+        // replacement rather than a surprise, and Escape keeps what was there.
+        var editor = new RegionEditorWindow(selected.Handle, _profile.Region) { Owner = this };
 
-        if (editor.ShowDialog() != true || editor.Result is null)
+        if (editor.ShowDialog() != true)
         {
             return;
         }
 
-        _profile.Regions = editor.Result.ToList();
+        _profile.SetRegion(editor.Result);
         _profiles.Save(_profile);
 
-        StatusText.Text = _profile.Regions.Count == 0
-            ? $"ลบพื้นที่แปลของ {_profile.Name} ทั้งหมดแล้ว"
-            : $"บันทึก {_profile.Regions.Count} พื้นที่ของ {_profile.Name} แล้ว: " +
-              string.Join(", ", _profile.Regions.Select(static r => r.Name));
+        StatusText.Text = editor.Result is null
+            ? $"ล้างพื้นที่การแปลของ {_profile.Name} แล้ว"
+            : $"บันทึกพื้นที่การแปลของ {_profile.Name} แล้ว";
 
-        // A moved region invalidates everything the pipeline has settled on, so
+        // A moved area invalidates everything the pipeline has settled on, so
         // restart rather than translating against stale coordinates.
         if (_session?.IsRunning == true)
         {
@@ -155,7 +220,7 @@ public partial class ControlPanelWindow : Window
             if (_session?.IsRunning == true)
             {
                 await _session.StopAsync();
-                StartButton.Content = "เริ่มแปล";
+                SetStartButtonState(running: false);
                 StatusText.Text = "หยุดแปลแล้ว";
                 return;
             }
@@ -169,7 +234,7 @@ public partial class ControlPanelWindow : Window
             _session ??= CreateSession();
             await _session.StartAsync(selected, _profile);
 
-            StartButton.Content = _session.IsRunning ? "หยุดแปล" : "เริ่มแปล";
+            SetStartButtonState(_session.IsRunning);
         }
         catch (Exception ex)
         {
@@ -181,6 +246,12 @@ public partial class ControlPanelWindow : Window
             _busy = false;
             StartButton.IsEnabled = SelectedWindow is not null;
         }
+    }
+
+    private void SetStartButtonState(bool running)
+    {
+        StartButtonText.Text = running ? "หยุดแปล" : "เริ่มแปล";
+        StartButtonIcon.Data = (Geometry)FindResource(running ? "IconStop" : "IconPlay");
     }
 
     private async Task RestartAsync()
@@ -199,8 +270,16 @@ public partial class ControlPanelWindow : Window
         var session = new TranslationSession(_settings.Translator, Dispatcher);
         session.Status += (_, message) => StatusText.Text = message;
 
+        // The panel remembers where it was dragged to, per game.
+        session.PanelPlacementChanged += (_, placement) =>
+        {
+            _profile.PanelBounds = placement;
+            _profiles.Save(_profile);
+        };
+
         session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
-        session.SetRegionOutlinesVisible(ShowRegionsToggle.IsChecked == true);
+        session.SetRegionVisible(ShowRegionToggle.IsChecked == true);
+        session.SetClickThrough(ClickThrough);
 
         return session;
     }
@@ -222,21 +301,68 @@ public partial class ControlPanelWindow : Window
                 break;
 
             case HotKeyAction.ToggleRegionOutlines:
-                ShowRegionsToggle.IsChecked = ShowRegionsToggle.IsChecked != true;
+                ShowRegionToggle.IsChecked = ShowRegionToggle.IsChecked != true;
                 break;
 
             case HotKeyAction.ToggleClickThrough:
-                _clickThrough = !_clickThrough;
-                _session?.SetClickThrough(_clickThrough);
-                StatusText.Text = _clickThrough ? "overlay คลิกทะลุ" : "overlay รับคลิกแล้ว";
+                // Flipping the radio raises Checked, which is the one place the
+                // mode is actually applied.
+                if (ClickThrough)
+                {
+                    InteractiveOption.IsChecked = true;
+                }
+                else
+                {
+                    ClickThroughOption.IsChecked = true;
+                }
+
                 break;
 
             case HotKeyAction.TranslateOnce:
-                // Snip-once shares the region editor's selection flow; wiring it
-                // to a one-shot pipeline pass is the next step.
                 StatusText.Text = "โหมดแปลครั้งเดียวยังไม่พร้อมใช้งาน";
                 break;
         }
+    }
+
+    /// <summary>
+    /// Both the buttons and the hotkeys route through here, so the controls on
+    /// screen can never disagree with what the overlay is drawing.
+    /// </summary>
+    private void OnLayerToggled(object sender, RoutedEventArgs e)
+    {
+        _session?.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
+        _session?.SetRegionVisible(ShowRegionToggle.IsChecked == true);
+    }
+
+    private void OnMouseModeChanged(object sender, RoutedEventArgs e)
+    {
+        // Fires during InitializeComponent, before the hint exists.
+        if (MouseModeHint is null)
+        {
+            return;
+        }
+
+        _session?.SetClickThrough(ClickThrough);
+        UpdateMouseModeHint();
+    }
+
+    private void UpdateMouseModeHint()
+    {
+        MouseModeHint.Text = ClickThrough
+            ? "คลิกทะลุ: เมาส์ทะลุไปที่เกมทั้งหมด — เล่นเกมได้ตามปกติ แต่ย้ายกรอบข้อความแปลไม่ได้"
+            : "โต้ตอบได้: ลากกรอบข้อความแปลเพื่อย้าย และลากมุมขวาล่างเพื่อปรับขนาด — เกมจะไม่ได้รับคลิกที่ตกบนกรอบ";
+
+        ResetPanelButton.IsEnabled = _profile.PanelBounds is not null;
+    }
+
+    private void OnResetPanelClick(object sender, RoutedEventArgs e)
+    {
+        _profile.PanelBounds = null;
+        _profiles.Save(_profile);
+        _session?.ResetPanelPlacement();
+
+        StatusText.Text = "ย้ายกรอบข้อความแปลกลับตำแหน่งเริ่มต้นแล้ว";
+        UpdateMouseModeHint();
     }
 
     private void UpdateMetrics()
@@ -263,21 +389,6 @@ public partial class ControlPanelWindow : Window
         StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator)
             ? "โมเดลพร้อมใช้งานแล้ว"
             : "ยังตั้งค่าโมเดลไม่ครบ — ยังแปลไม่ได้";
-    }
-
-    /// <summary>
-    /// Both the buttons and the hotkeys route through here, so the toggle state
-    /// on screen can never disagree with what the overlay is showing.
-    /// </summary>
-    private void OnLayerToggled(object sender, RoutedEventArgs e)
-    {
-        if (_session is null)
-        {
-            return;
-        }
-
-        _session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
-        _session.SetRegionOutlinesVisible(ShowRegionsToggle.IsChecked == true);
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();

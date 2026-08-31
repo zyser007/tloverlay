@@ -31,14 +31,14 @@
                    FontFamily="Leelawadee UI, Segoe UI"
                    FontSize="15"
                    HorizontalAlignment="Center"
-                   Text="ลากเมาส์เพื่อเพิ่มพื้นที่ใหม่ — คลิกกรอบเดิมเพื่อเลือก, Delete เพื่อลบ" />
+                   Text="ลากเมาส์คลุมกล่องบทสนทนาเพื่อกำหนดพื้นที่การแปล" />
         <TextBlock x:Name="Summary"
                    Foreground="#FF9AA3B2"
                    FontFamily="Leelawadee UI, Segoe UI"
                    FontSize="12.5"
                    HorizontalAlignment="Center"
                    Margin="0,4,0,0"
-                   Text="Enter = บันทึก · Esc = ยกเลิกทั้งหมด" />
+                   Text="Enter = บันทึก · Esc = ยกเลิก" />
       </StackPanel>
     </Border>
   </Grid>

@@ -43,6 +43,33 @@ public class ProfileStoreTests : IDisposable
     }
 
     [Fact]
+    public void ADraggedPanelPlacementSurvivesASaveAndLoad()
+    {
+        // RelativeRect is a positional record, so this also proves the
+        // serialiser can rebuild it through its constructor.
+        var store = new ProfileStore(_directory);
+        var profile = GameProfile.CreateDefault("Placed");
+        profile.PanelBounds = new RelativeRect(0.21, 0.62, 0.5, 0.14);
+
+        var loaded = store.TryLoad(store.Save(profile));
+
+        Assert.NotNull(loaded?.PanelBounds);
+        Assert.Equal(0.21, loaded!.PanelBounds!.X, precision: 6);
+        Assert.Equal(0.14, loaded.PanelBounds.Height, precision: 6);
+    }
+
+    [Fact]
+    public void AProfileWithNoPanelPlacementLoadsAsNull()
+    {
+        var store = new ProfileStore(_directory);
+
+        var loaded = store.TryLoad(store.Save(GameProfile.CreateDefault("Unplaced")));
+
+        Assert.NotNull(loaded);
+        Assert.Null(loaded!.PanelBounds);
+    }
+
+    [Fact]
     public void LoadAllFindsEverySavedProfile()
     {
         var store = new ProfileStore(_directory);

@@ -61,18 +61,21 @@ Three design decisions carry most of the weight:
 3. Pick the game window from the list. The panel warns you if the window still
    has a border, which usually means the game is in exclusive fullscreen.
 4. `Ctrl+Alt+R`, drag a box over the dialogue area, press Enter. The editor opens
-   showing the regions you already have; dragging adds another, clicking one
-   selects it and Delete removes it. Regions are saved per game and reload
-   automatically next time.
+   showing the area already set, so redrawing replaces it deliberately and Escape
+   keeps what was there. One area per game, saved and reloaded automatically.
 5. `Ctrl+Alt+T` to start translating.
+6. To move the Thai out of the way, switch the mouse mode to **interactive**
+   (`Ctrl+Alt+C`), drag the panel where you want it and drag its bottom-right
+   corner to resize. The position is saved per game. Switch back to click-through
+   to play.
 
 | Hotkey | Action |
 |---|---|
 | `Ctrl+Alt+T` | Start / stop translating |
 | `Ctrl+Alt+R` | Draw the capture region |
 | `Ctrl+Alt+H` | Show / hide the translated text |
-| `Ctrl+Alt+G` | Show / hide the capture region outlines |
-| `Ctrl+Alt+C` | Toggle click-through |
+| `Ctrl+Alt+G` | Show / hide the translation area |
+| `Ctrl+Alt+C` | Switch between click-through and interactive |
 
 ## Models
 

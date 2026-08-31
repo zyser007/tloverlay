@@ -3,14 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TLOverlay"
         Icon="/Assets/tloverlay.ico"
-        Height="620" Width="760"
+        Height="760" Width="800"
         Background="{StaticResource PanelBackground}"
         FontFamily="{StaticResource ThaiUiFont}">
 
   <Grid Margin="18">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
+      <RowDefinition Height="*" MinHeight="130" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -47,50 +47,113 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
-    <Border Grid.Row="2"
-            Margin="0,12,0,0"
-            Padding="14,10"
-            CornerRadius="6"
-            Background="{StaticResource SurfaceBackground}"
-            BorderBrush="{StaticResource SurfaceBorder}"
-            BorderThickness="1">
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,12,0,0">
       <StackPanel>
         <TextBlock x:Name="StatusText" TextWrapping="Wrap" />
         <TextBlock x:Name="MetricsText"
                    Foreground="{StaticResource PanelMuted}"
+                   FontFamily="{StaticResource MonoFont}"
                    FontSize="12"
                    Margin="0,6,0,0" />
       </StackPanel>
     </Border>
 
-    <TextBlock Grid.Row="3"
-               Margin="0,12,0,0"
-               Foreground="{StaticResource PanelMuted}"
-               FontSize="12"
-               TextWrapping="Wrap"
-               Text="คีย์ลัด: Ctrl+Alt+T เปิด/ปิดการแปล · Ctrl+Alt+R เลือกพื้นที่ · Ctrl+Alt+H ซ่อนข้อความแปล · Ctrl+Alt+G ซ่อนกรอบพื้นที่ · Ctrl+Alt+C สลับคลิกทะลุ" />
+    <!-- Display: what is drawn over the game, and whether the mouse goes through it. -->
+    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,10,0,0">
+      <StackPanel>
+        <TextBlock Text="การแสดงผลบนจอเกม" Style="{StaticResource CardHeading}" />
 
-    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,14,0,0">
-      <TextBlock Text="แสดงบนจอ:" VerticalAlignment="Center"
-                 Foreground="{StaticResource PanelMuted}" FontSize="12.5" Margin="0,0,10,0" />
-      <ToggleButton x:Name="ShowTranslationsToggle" Content="ข้อความแปล" IsChecked="True"
-                    Padding="12,6" MinWidth="0" Margin="0,0,8,0"
-                    FontFamily="{StaticResource ThaiUiFont}"
-                    Checked="OnLayerToggled" Unchecked="OnLayerToggled" />
-      <ToggleButton x:Name="ShowRegionsToggle" Content="กรอบพื้นที่"
-                    Padding="12,6" MinWidth="0"
-                    FontFamily="{StaticResource ThaiUiFont}"
-                    Checked="OnLayerToggled" Unchecked="OnLayerToggled" />
-    </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+          <ToggleButton x:Name="ShowTranslationsToggle" IsChecked="True" Padding="12,6" MinWidth="0"
+                        Margin="0,0,8,0" Checked="OnLayerToggled" Unchecked="OnLayerToggled">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconText}" Style="{StaticResource ButtonIcon}" />
+              <TextBlock Text="ข้อความแปล" />
+            </StackPanel>
+          </ToggleButton>
 
-    <StackPanel Grid.Row="5"
-                Orientation="Horizontal"
-                HorizontalAlignment="Right"
-                Margin="0,14,0,0">
-      <Button Content="ตั้งค่าโมเดล" Click="OnSetupClick" Margin="0,0,10,0" />
-      <Button Content="รีเฟรช" Click="OnRefreshClick" Margin="0,0,10,0" />
-      <Button x:Name="EditRegionButton" Content="เลือกพื้นที่" Click="OnEditRegionClick" Margin="0,0,10,0" IsEnabled="False" />
-      <Button x:Name="StartButton" Content="เริ่มแปล" Click="OnStartStopClick" IsEnabled="False" />
+          <ToggleButton x:Name="ShowRegionToggle" Padding="12,6" MinWidth="0"
+                        Checked="OnLayerToggled" Unchecked="OnLayerToggled">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconRegion}" Style="{StaticResource ButtonIcon}" />
+              <TextBlock Text="พื้นที่การแปล" />
+            </StackPanel>
+          </ToggleButton>
+        </StackPanel>
+
+        <TextBlock Text="โหมดเมาส์" Style="{StaticResource CardHeading}" />
+
+        <StackPanel Orientation="Horizontal">
+          <RadioButton x:Name="ClickThroughOption" GroupName="MouseMode" IsChecked="True"
+                       Checked="OnMouseModeChanged" Margin="0,0,20,0" VerticalContentAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconPointer}" Style="{StaticResource ButtonIconFilled}" />
+              <TextBlock Text="คลิกทะลุ" />
+            </StackPanel>
+          </RadioButton>
+
+          <RadioButton x:Name="InteractiveOption" GroupName="MouseMode"
+                       Checked="OnMouseModeChanged" VerticalContentAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconPointer}" Style="{StaticResource ButtonIconFilled}" />
+              <TextBlock Text="โต้ตอบได้" />
+            </StackPanel>
+          </RadioButton>
+
+          <Button x:Name="ResetPanelButton" Click="OnResetPanelClick"
+                  Padding="11,5" MinWidth="0" Margin="24,0,0,0"
+                  ToolTip="ย้ายกรอบข้อความแปลกลับไปตำแหน่งเริ่มต้น">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconReset}" Style="{StaticResource ButtonIcon}" />
+              <TextBlock Text="รีเซ็ตตำแหน่งกรอบ" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <TextBlock x:Name="MouseModeHint"
+                   Foreground="{StaticResource PanelMuted}"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,8,0,0" />
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,10,0,0">
+      <StackPanel>
+        <TextBlock Text="คีย์ลัด (ใช้ได้ตลอด แม้ขณะเล่นเกมอยู่)" Style="{StaticResource CardHeading}" />
+        <!-- Filled in code from the same list the keys are registered from. -->
+        <UniformGrid x:Name="HotKeyGrid" Columns="2" />
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+      <Button Click="OnSetupClick" Margin="0,0,10,0">
+        <StackPanel Orientation="Horizontal">
+          <Path Data="{StaticResource IconModel}" Style="{StaticResource ButtonIcon}" />
+          <TextBlock Text="ตั้งค่าโมเดล" />
+        </StackPanel>
+      </Button>
+
+      <Button Click="OnRefreshClick" Margin="0,0,10,0">
+        <StackPanel Orientation="Horizontal">
+          <Path Data="{StaticResource IconRefresh}" Style="{StaticResource ButtonIcon}" />
+          <TextBlock Text="รีเฟรช" />
+        </StackPanel>
+      </Button>
+
+      <Button x:Name="EditRegionButton" Click="OnEditRegionClick" Margin="0,0,10,0" IsEnabled="False">
+        <StackPanel Orientation="Horizontal">
+          <Path Data="{StaticResource IconRegion}" Style="{StaticResource ButtonIcon}" />
+          <TextBlock Text="เลือกพื้นที่การแปล" />
+        </StackPanel>
+      </Button>
+
+      <Button x:Name="StartButton" Click="OnStartStopClick" IsEnabled="False">
+        <StackPanel Orientation="Horizontal">
+          <Path x:Name="StartButtonIcon" Data="{StaticResource IconPlay}" Style="{StaticResource ButtonIconFilled}" />
+          <TextBlock x:Name="StartButtonText" Text="เริ่มแปล" />
+        </StackPanel>
+      </Button>
     </StackPanel>
   </Grid>
 </Window>
