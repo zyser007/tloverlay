@@ -188,55 +188,84 @@ internal interface IGraphicsCaptureItemInterop
     IntPtr CreateForMonitor(IntPtr monitor, ref Guid iid);
 }
 
-[ComImport]
-[Guid("5B0D3235-4DBA-4D44-865E-8F1D0E4FD04D")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal unsafe interface IMemoryBufferByteAccess
-{
-    void GetBuffer(out byte* buffer, out uint capacity);
-}
-
-/// <summary>Moves pixels between SoftwareBitmap and plain managed arrays.</summary>
-internal static unsafe class SoftwareBitmapInterop
+/// <summary>
+/// Moves pixels between SoftwareBitmap and plain managed arrays.
+///
+/// Goes through IBuffer and DataReader rather than IMemoryBufferByteAccess. That
+/// COM interface is the usual way to get at the pixels without a copy, but a
+/// CsWinRT object cannot be cast to a [ComImport] interface - the runtime does
+/// no QueryInterface for that, and it fails at runtime with "Invalid cast from
+/// WinRT.IInspectable". The projected path costs one extra copy per frame, which
+/// at the eight frames a second this pipeline actually pulls is not worth any
+/// amount of interop risk.
+/// </summary>
+internal static class SoftwareBitmapInterop
 {
     public static CapturedFrame ToFrame(SoftwareBitmap bitmap)
     {
         ArgumentNullException.ThrowIfNull(bitmap);
 
-        using var buffer = bitmap.LockBuffer(BitmapBufferAccessMode.Read);
-        using var reference = buffer.CreateReference();
+        SoftwareBitmap source = bitmap;
+        SoftwareBitmap? converted = null;
 
-        var description = buffer.GetPlaneDescription(0);
-        ((IMemoryBufferByteAccess)reference).GetBuffer(out byte* data, out uint capacity);
-
-        int width = description.Width;
-        int height = description.Height;
-        int sourceStride = description.Stride;
-        int destinationStride = width * CapturedFrame.BytesPerPixel;
-
-        var pixels = new byte[destinationStride * height];
-
-        for (int row = 0; row < height; row++)
+        // CopyToBuffer needs a format it can lay out linearly.
+        if (bitmap.BitmapPixelFormat != BitmapPixelFormat.Bgra8
+            || bitmap.BitmapAlphaMode == BitmapAlphaMode.Straight)
         {
-            int sourceOffset = description.StartIndex + (row * sourceStride);
-            if (sourceOffset + destinationStride > capacity)
-            {
-                break;
-            }
-
-            Marshal.Copy(
-                (IntPtr)(data + sourceOffset),
-                pixels,
-                row * destinationStride,
-                destinationStride);
+            converted = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            source = converted;
         }
 
-        return new CapturedFrame(pixels, width, height, destinationStride);
+        try
+        {
+            int width = source.PixelWidth;
+            int height = source.PixelHeight;
+
+            var buffer = new Windows.Storage.Streams.Buffer(
+                (uint)(width * height * CapturedFrame.BytesPerPixel));
+
+            source.CopyToBuffer(buffer);
+
+            if (buffer.Length == 0)
+            {
+                buffer.Length = buffer.Capacity;
+            }
+
+            var pixels = new byte[buffer.Length];
+
+            using (var reader = Windows.Storage.Streams.DataReader.FromBuffer(buffer))
+            {
+                reader.ReadBytes(pixels);
+            }
+
+            // Derive the stride from what actually arrived rather than assuming
+            // rows are tightly packed.
+            int stride = height > 0 ? pixels.Length / height : width * CapturedFrame.BytesPerPixel;
+
+            return new CapturedFrame(pixels, width, height, stride);
+        }
+        finally
+        {
+            converted?.Dispose();
+        }
     }
 
     public static SoftwareBitmap ToSoftwareBitmap(CapturedFrame frame)
     {
         ArgumentNullException.ThrowIfNull(frame);
+
+        int rowBytes = frame.Width * CapturedFrame.BytesPerPixel;
+        var tight = new byte[rowBytes * frame.Height];
+
+        // CopyFromBuffer wants exactly one row after another, so any capture
+        // padding has to come out here.
+        for (int row = 0; row < frame.Height; row++)
+        {
+            Buffer.BlockCopy(frame.Pixels, row * frame.Stride, tight, row * rowBytes, rowBytes);
+        }
+
+        using var writer = new Windows.Storage.Streams.DataWriter();
+        writer.WriteBytes(tight);
 
         var bitmap = new SoftwareBitmap(
             BitmapPixelFormat.Bgra8,
@@ -244,30 +273,7 @@ internal static unsafe class SoftwareBitmapInterop
             frame.Height,
             BitmapAlphaMode.Premultiplied);
 
-        using (var buffer = bitmap.LockBuffer(BitmapBufferAccessMode.Write))
-        using (var reference = buffer.CreateReference())
-        {
-            var description = buffer.GetPlaneDescription(0);
-            ((IMemoryBufferByteAccess)reference).GetBuffer(out byte* data, out uint capacity);
-
-            int rowBytes = frame.Width * CapturedFrame.BytesPerPixel;
-
-            for (int row = 0; row < frame.Height; row++)
-            {
-                int destinationOffset = description.StartIndex + (row * description.Stride);
-                if (destinationOffset + rowBytes > capacity)
-                {
-                    break;
-                }
-
-                Marshal.Copy(
-                    frame.Pixels,
-                    row * frame.Stride,
-                    (IntPtr)(data + destinationOffset),
-                    rowBytes);
-            }
-        }
-
+        bitmap.CopyFromBuffer(writer.DetachBuffer());
         return bitmap;
     }
 }

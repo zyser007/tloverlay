@@ -47,9 +47,33 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     public bool IsRunning => _session is not null;
 
+    /// <summary>
+    /// Starts capture. The WinRT objects are created on a threadpool thread and
+    /// only ever touched from one.
+    ///
+    /// This matters more than it looks: FrameArrived is raised on the threadpool,
+    /// which is MTA, while WPF's UI thread is STA. Objects created on the UI
+    /// thread are proxies over there, and every call across the boundary fails
+    /// with "the application called an interface that was marshalled for a
+    /// different thread". Blocking here is fine - this is device and session
+    /// setup, measured in milliseconds, not I/O.
+    /// </summary>
     public void Start(IntPtr windowHandle)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+
+        Task.Run(() => StartCore(windowHandle)).GetAwaiter().GetResult();
+    }
+
+    private void StartCore(IntPtr windowHandle)
+    {
+        // Also initialises this thread's apartment for WinRT before the raw
+        // activation-factory call in CaptureInterop, which would otherwise be
+        // the first WinRT touch on a fresh threadpool thread.
+        if (!GraphicsCaptureSession.IsSupported())
+        {
+            throw new NotSupportedException("Windows Graphics Capture is not available on this machine.");
+        }
 
         lock (_gate)
         {
@@ -189,10 +213,15 @@ public sealed class WgcCaptureSource : ICaptureSource
 
     public void Stop()
     {
-        lock (_gate)
+        // Releasing these objects is a COM call like any other, so it has to
+        // happen in the apartment that created them.
+        Task.Run(() =>
         {
-            StopCore();
-        }
+            lock (_gate)
+            {
+                StopCore();
+            }
+        }).GetAwaiter().GetResult();
     }
 
     private void StopCore()

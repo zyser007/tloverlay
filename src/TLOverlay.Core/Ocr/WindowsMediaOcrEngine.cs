@@ -15,14 +15,21 @@ namespace TLOverlay.Core.Ocr;
 /// </summary>
 public sealed class WindowsMediaOcrEngine : IOcrEngine
 {
-    private readonly WinOcr.OcrEngine? _engine;
+    private readonly Lazy<WinOcr.OcrEngine?> _engine;
     private readonly PreprocessOptions _preprocess;
 
     public WindowsMediaOcrEngine(string languageTag = "en-US", PreprocessOptions? preprocess = null)
     {
         LanguageTag = languageTag;
 
-        _engine = TryCreateEngine(languageTag);
+        // Deliberately lazy. The engine is built on first use, which happens on
+        // the pipeline's threadpool thread - the same thread that will call it.
+        // Constructing it here would build it on WPF's STA UI thread, and using
+        // that instance from the pipeline is the "marshalled for a different
+        // thread" failure.
+        _engine = new Lazy<WinOcr.OcrEngine?>(
+            () => TryCreateEngine(languageTag),
+            LazyThreadSafetyMode.ExecutionAndPublication);
 
         _preprocess = preprocess ?? new PreprocessOptions
         {
@@ -32,7 +39,11 @@ public sealed class WindowsMediaOcrEngine : IOcrEngine
         };
     }
 
-    public bool IsAvailable => _engine is not null;
+    /// <summary>
+    /// Probes with a throwaway engine rather than the one recognition will use,
+    /// so asking the question from the UI thread cannot pin an engine to it.
+    /// </summary>
+    public bool IsAvailable => TryCreateEngine(LanguageTag) is not null;
 
     public string LanguageTag { get; }
 
@@ -58,7 +69,9 @@ public sealed class WindowsMediaOcrEngine : IOcrEngine
     {
         ArgumentNullException.ThrowIfNull(frame);
 
-        if (_engine is null)
+        WinOcr.OcrEngine? engine = _engine.Value;
+
+        if (engine is null)
         {
             return OcrResult.Empty;
         }
@@ -75,7 +88,7 @@ public sealed class WindowsMediaOcrEngine : IOcrEngine
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        WinOcr.OcrResult recognized = await _engine.RecognizeAsync(bitmap).AsTask(cancellationToken)
+        WinOcr.OcrResult recognized = await engine.RecognizeAsync(bitmap).AsTask(cancellationToken)
             .ConfigureAwait(false);
 
         return Convert(recognized, inverseScale);
