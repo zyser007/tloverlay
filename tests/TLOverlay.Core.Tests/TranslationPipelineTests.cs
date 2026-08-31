@@ -2,6 +2,7 @@ using TLOverlay.Core.Capture;
 using TLOverlay.Core.Ocr;
 using TLOverlay.Core.Pipeline;
 using TLOverlay.Core.Profiles;
+using Xunit;
 
 namespace TLOverlay.Core.Tests;
 
