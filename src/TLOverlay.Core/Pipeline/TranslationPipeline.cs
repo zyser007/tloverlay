@@ -106,8 +106,14 @@ public sealed class TranslationPipeline : IAsyncDisposable
         Metrics.Reset();
         _capture.Start(windowHandle);
 
-        _loopCancellation = new CancellationTokenSource();
-        _loop = Task.Run(() => RunAsync(_loopCancellation.Token));
+        var cancellation = new CancellationTokenSource();
+        _loopCancellation = cancellation;
+
+        // The token is read here rather than inside the lambda: the lambda runs
+        // on a threadpool thread some time later, and a stop that arrives first
+        // has already set the field back to null.
+        CancellationToken token = cancellation.Token;
+        _loop = Task.Run(() => RunAsync(token));
     }
 
     public async Task StopAsync()
