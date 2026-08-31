@@ -114,6 +114,32 @@
                    Foreground="{StaticResource PanelMuted}"
                    FontSize="12"
                    TextWrapping="Wrap"
+                   Margin="0,8,0,14" />
+
+        <TextBlock Text="โหมดการแปล" Style="{StaticResource CardHeading}" />
+
+        <StackPanel Orientation="Horizontal">
+          <ToggleButton x:Name="AutoTranslateToggle" IsChecked="True" Padding="12,6" MinWidth="0"
+                        Margin="0,0,10,0" Checked="OnAutoTranslateChanged" Unchecked="OnAutoTranslateChanged">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconRefresh}" Style="{StaticResource ButtonIcon}" />
+              <TextBlock Text="แปลอัตโนมัติ" />
+            </StackPanel>
+          </ToggleButton>
+
+          <Button x:Name="TranslateOnceButton" Click="OnTranslateOnceClick" Padding="12,6" MinWidth="0"
+                  IsEnabled="False" ToolTip="แปลสิ่งที่อยู่บนจอตอนนี้หนึ่งครั้ง">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconOnce}" Style="{StaticResource ButtonIconFilled}" />
+              <TextBlock Text="แปลครั้งเดียว" />
+            </StackPanel>
+          </Button>
+        </StackPanel>
+
+        <TextBlock x:Name="TranslateModeHint"
+                   Foreground="{StaticResource PanelMuted}"
+                   FontSize="12"
+                   TextWrapping="Wrap"
                    Margin="0,8,0,0" />
       </StackPanel>
     </Border>

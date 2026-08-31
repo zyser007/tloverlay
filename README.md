@@ -66,16 +66,29 @@ Three design decisions carry most of the weight:
 5. `Ctrl+Alt+T` to start translating.
 6. To move the Thai out of the way, switch the mouse mode to **interactive**
    (`Ctrl+Alt+C`), drag the panel where you want it and drag its bottom-right
-   corner to resize. The position is saved per game. Switch back to click-through
-   to play.
+   corner - the ridged grip - to resize. The position is saved per game. Switch
+   back to click-through to play.
 
 | Hotkey | Action |
 |---|---|
 | `Ctrl+Alt+T` | Start / stop translating |
 | `Ctrl+Alt+R` | Draw the capture region |
+| `Ctrl+Alt+S` | Translate what is on screen once |
 | `Ctrl+Alt+H` | Show / hide the translated text |
 | `Ctrl+Alt+G` | Show / hide the translation area |
 | `Ctrl+Alt+C` | Switch between click-through and interactive |
+
+### Automatic and on-demand translating
+
+By default the pipeline watches the capture region and translates a line as soon
+as it settles. Turn **แปลอัตโนมัติ** off and nothing is translated until you ask:
+press `Ctrl+Alt+S`, or the **แปลครั้งเดียว** button, and the text on screen right
+now is captured, read and translated once.
+
+On-demand is the mode to use when a game redraws its dialogue box constantly, or
+when you only want a line here and there and would rather not spend the CPU. It
+also ignores the "this is the same text as last time" guard, so pressing it twice
+on the same line really does translate it again.
 
 ## Models
 
@@ -88,6 +101,19 @@ model or move the work between CPU and GPU.
 
 If you would rather script it, `tools/fetch-models.ps1` does the same job, but
 it needs PowerShell 7 (`pwsh`), which Windows does not ship by default.
+
+### Where they are installed
+
+The server and the model together are several gigabytes, so the setup screen lets
+you choose the folder they go in - useful when the system drive is the full one.
+It shows the free space on the chosen drive and warns before a download that
+would not fit.
+
+Changing the location when something is already installed offers to move it.
+The move copies everything across first and only deletes the original once every
+file has arrived, so an interrupted move costs you the copy, never the install.
+Settings, profiles, logs and the translation cache are small and stay under
+`%LocalAppData%\TLOverlay` regardless; only `runtime\` and `models\` move.
 
 See [NOTICE.md](NOTICE.md) for model licensing - it matters, and not every
 model here may be used commercially. The setup screen shows each model's licence

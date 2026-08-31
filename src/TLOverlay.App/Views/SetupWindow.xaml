@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TLOverlay — ตั้งค่าครั้งแรก"
         Icon="/Assets/tloverlay.ico"
-        Height="620" Width="640"
+        Height="700" Width="660"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource PanelBackground}"
@@ -41,6 +41,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
@@ -53,8 +54,32 @@
                  Margin="0,4,0,0" />
     </StackPanel>
 
-    <!-- llama-server.exe -->
+    <!-- Where the two big files go. First, because it decides where the rest lands. -->
     <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,10">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="24" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Path Grid.Column="0" Data="{StaticResource IconFolder}" Style="{StaticResource ButtonIcon}"
+              Margin="0" VerticalAlignment="Center" />
+
+        <StackPanel Grid.Column="1" Margin="6,0,10,0">
+          <TextBlock Text="ตำแหน่งติดตั้ง" FontWeight="SemiBold" />
+          <TextBlock x:Name="InstallPathText" Style="{StaticResource PathText}" />
+          <TextBlock x:Name="FreeSpaceText" Foreground="{StaticResource PanelMuted}" FontSize="11.5"
+                     Margin="0,3,0,0" />
+        </StackPanel>
+
+        <Button Grid.Column="2" Style="{StaticResource SmallButton}"
+                Content="เปลี่ยนตำแหน่ง…" Click="OnChangeInstallLocationClick" />
+      </Grid>
+    </Border>
+
+    <!-- llama-server.exe -->
+    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,10">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="24" />
@@ -78,7 +103,7 @@
     </Border>
 
     <!-- model -->
-    <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,14">
+    <Border Grid.Row="3" Style="{StaticResource Card}" Margin="0,0,0,14">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="24" />
@@ -101,7 +126,7 @@
       </Grid>
     </Border>
 
-    <StackPanel Grid.Row="3" Margin="0,0,0,14">
+    <StackPanel Grid.Row="4" Margin="0,0,0,14">
       <TextBlock Text="โมเดล" Foreground="{StaticResource PanelMuted}" FontSize="12" Margin="0,0,0,5" />
       <ComboBox x:Name="ModelCombo" SelectionChanged="OnModelSelectionChanged" Padding="8,6" />
       <TextBox x:Name="CustomUrl" Visibility="Collapsed" Margin="0,8,0,0" Padding="8,6"
@@ -112,7 +137,7 @@
                  TextWrapping="Wrap" Margin="0,6,0,0" />
     </StackPanel>
 
-    <StackPanel Grid.Row="4" Margin="0,0,0,14">
+    <StackPanel Grid.Row="5" Margin="0,0,0,14">
       <TextBlock Text="รันโมเดลบน" Foreground="{StaticResource PanelMuted}" FontSize="12" Margin="0,0,0,5" />
       <UniformGrid Columns="2">
         <RadioButton x:Name="CpuOption" GroupName="Backend" IsChecked="True" Margin="0,0,6,0"
@@ -134,7 +159,7 @@
       </UniformGrid>
     </StackPanel>
 
-    <StackPanel Grid.Row="5" x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,0,0,14">
+    <StackPanel Grid.Row="6" x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,0,0,14">
       <ProgressBar x:Name="DownloadBar" Height="6" Minimum="0" Maximum="1"
                    Background="{StaticResource TrackBackground}" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
       <Grid Margin="0,7,0,0">
@@ -147,7 +172,7 @@
       </Grid>
     </StackPanel>
 
-    <Expander Grid.Row="6" VerticalAlignment="Top" Header="ไม่มีเน็ตบนเครื่องนี้?"
+    <Expander Grid.Row="7" VerticalAlignment="Top" Header="ไม่มีเน็ตบนเครื่องนี้?"
               Foreground="{StaticResource AccentBrush}" FontSize="13" Margin="0,4,0,0">
       <StackPanel Margin="4,8,0,0">
         <TextBlock Foreground="{StaticResource PanelMuted}" FontSize="12" TextWrapping="Wrap"
@@ -162,7 +187,7 @@
       </StackPanel>
     </Expander>
 
-    <Grid Grid.Row="7" Margin="0,14,0,0">
+    <Grid Grid.Row="8" Margin="0,14,0,0">
       <TextBlock x:Name="StatusText" HorizontalAlignment="Left" VerticalAlignment="Center"
                  TextWrapping="Wrap" MaxWidth="330" Foreground="{StaticResource PanelMuted}" FontSize="12" />
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

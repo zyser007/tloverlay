@@ -182,11 +182,31 @@ public partial class OverlayWindow : Window
         return new ControlTemplate(typeof(Thumb)) { VisualTree = border };
     }
 
+    /// <summary>
+    /// The classic three diagonal ridges. A plain filled square said nothing
+    /// about what it was for; this is the shape Windows itself uses for a resize
+    /// corner, so it needs no explaining.
+    /// </summary>
     private static ControlTemplate GripThumbTemplate()
     {
         var border = new FrameworkElementFactory(typeof(Border));
-        border.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(0xCC, 0x4C, 0x8D, 0xFF)));
-        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(3, 0, 5, 0));
+        border.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x55, 0x4C, 0x8D, 0xFF)));
+        border.SetValue(Border.CornerRadiusProperty, new CornerRadius(4, 0, 5, 0));
+
+        var grip = new FrameworkElementFactory(typeof(System.Windows.Shapes.Path));
+        grip.SetValue(
+            System.Windows.Shapes.Path.DataProperty,
+            Geometry.Parse("M 3,15 L 15,3 M 7,15 L 15,7 M 11,15 L 15,11"));
+        grip.SetValue(
+            System.Windows.Shapes.Path.StrokeProperty,
+            new SolidColorBrush(Color.FromArgb(0xFF, 0xDC, 0xEA, 0xFF)));
+        grip.SetValue(System.Windows.Shapes.Path.StrokeThicknessProperty, 1.8);
+        grip.SetValue(System.Windows.Shapes.Path.StrokeStartLineCapProperty, PenLineCap.Round);
+        grip.SetValue(System.Windows.Shapes.Path.StrokeEndLineCapProperty, PenLineCap.Round);
+        grip.SetValue(FrameworkElement.MarginProperty, new Thickness(1));
+
+        border.AppendChild(grip);
+
         return new ControlTemplate(typeof(Thumb)) { VisualTree = border };
     }
 

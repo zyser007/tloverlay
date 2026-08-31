@@ -23,6 +23,7 @@ public sealed class TranslationSession : IAsyncDisposable
 {
     private readonly Dispatcher _dispatcher;
     private readonly TranslatorSettings _settings;
+    private readonly string? _installRoot;
 
     private OverlayWindow? _overlay;
     private TranslationPipeline? _pipeline;
@@ -32,12 +33,19 @@ public sealed class TranslationSession : IAsyncDisposable
     private GameWindow? _target;
     private bool _translationsVisible = true;
     private bool _clickThrough = true;
+    private bool _automatic = true;
     private bool _regionVisible;
     private bool _disposed;
 
-    public TranslationSession(TranslatorSettings settings, Dispatcher? dispatcher = null)
+    /// <summary>
+    /// <paramref name="installRoot"/> is where runtime\ and models\ were
+    /// installed. It is passed through rather than looked up so that a session
+    /// started right after the player moved the install still finds the files.
+    /// </summary>
+    public TranslationSession(TranslatorSettings settings, string? installRoot = null, Dispatcher? dispatcher = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _installRoot = installRoot;
         _dispatcher = dispatcher ?? Application.Current.Dispatcher;
     }
 
@@ -71,7 +79,7 @@ public sealed class TranslationSession : IAsyncDisposable
             return;
         }
 
-        if (!TranslatorFactory.IsModelInstalled(_settings))
+        if (!TranslatorFactory.IsModelInstalled(_settings, _installRoot))
         {
             Report("ยังไม่มีโมเดลแปลภาษา — กดปุ่ม “ตั้งค่าโมเดล” เพื่อดาวน์โหลด");
             return;
@@ -79,7 +87,7 @@ public sealed class TranslationSession : IAsyncDisposable
 
         _target = target;
 
-        var translator = TranslatorFactory.Create(_settings, profile, App.DataDirectory, out _cache);
+        var translator = TranslatorFactory.Create(_settings, profile, App.DataDirectory, _installRoot, out _cache);
 
         _pipeline = new TranslationPipeline(new WgcCaptureSource(), _ocr, translator);
         _pipeline.TranslationReady += OnTranslationReady;
@@ -116,6 +124,7 @@ public sealed class TranslationSession : IAsyncDisposable
             return;
         }
 
+        _pipeline.AutomaticTranslation = _automatic;
         await _pipeline.StartAsync(target.Handle, profile).ConfigureAwait(true);
 
         Report($"กำลังแปล: {target.Title}");
@@ -147,6 +156,27 @@ public sealed class TranslationSession : IAsyncDisposable
     public void ResetPanelPlacement() => _overlay?.ResetPanelPlacement();
 
     public bool ClickThrough => _clickThrough;
+
+    public bool AutomaticTranslation => _automatic;
+
+    /// <summary>
+    /// Turns continuous translation on or off without tearing the session down,
+    /// so capture stays attached and the model stays loaded - an on-demand pass
+    /// right after is instant rather than paying for a cold start.
+    /// </summary>
+    public void SetAutomaticTranslation(bool automatic)
+    {
+        _automatic = automatic;
+
+        if (_pipeline is not null)
+        {
+            _pipeline.AutomaticTranslation = automatic;
+        }
+    }
+
+    /// <summary>Translates what is on screen right now, whatever the mode.</summary>
+    public Task TranslateOnceAsync() =>
+        _pipeline?.TranslateOnceAsync() ?? Task.CompletedTask;
 
     public void SetClickThrough(bool clickThrough)
     {

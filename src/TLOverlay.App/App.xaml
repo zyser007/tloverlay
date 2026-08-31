@@ -75,6 +75,8 @@
     <Geometry x:Key="IconModel">M 12,3 V 14 M 7.5,9.5 L 12,14 L 16.5,9.5 M 4,19 H 20</Geometry>
     <Geometry x:Key="IconText">M 5,6 H 19 M 12,6 V 19 M 9,19 H 15</Geometry>
     <Geometry x:Key="IconPointer">M 6,3 L 6,18 L 10,14 L 13,20.5 L 15.5,19.5 L 12.5,13.5 L 18,13.5 Z</Geometry>
+    <Geometry x:Key="IconOnce">M 13,2 L 6,13 H 11 L 10,22 L 18,10 H 12 Z</Geometry>
+    <Geometry x:Key="IconFolder">M 3,7 H 9 L 11,9.5 H 21 V 19 H 3 Z</Geometry>
     <Geometry x:Key="IconReset">M 4,10 V 4 H 10 M 4,4 L 11,11 M 11,11 H 20 V 20 H 11 Z</Geometry>
 
     <Style x:Key="ButtonIcon" TargetType="Path">

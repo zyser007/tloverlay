@@ -25,7 +25,7 @@ public partial class ControlPanelWindow : Window
         [HotKeyAction.ToggleTranslations] = "ซ่อน/แสดงข้อความแปล",
         [HotKeyAction.ToggleRegionOutlines] = "ซ่อน/แสดงพื้นที่การแปล",
         [HotKeyAction.ToggleClickThrough] = "สลับโหมดเมาส์",
-        [HotKeyAction.TranslateOnce] = "แปลครั้งเดียว (ยังไม่พร้อมใช้)",
+        [HotKeyAction.TranslateOnce] = "แปลครั้งเดียว",
     };
 
     private readonly ProfileStore _profiles = new(AppPaths.ProfilesDirectory);
@@ -48,6 +48,7 @@ public partial class ControlPanelWindow : Window
 
         BuildHotKeyGrid(failed);
         UpdateMouseModeHint();
+        UpdateTranslateModeHint();
 
         _metricsTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -221,6 +222,7 @@ public partial class ControlPanelWindow : Window
             {
                 await _session.StopAsync();
                 SetStartButtonState(running: false);
+                UpdateTranslateModeHint();
                 StatusText.Text = "หยุดแปลแล้ว";
                 return;
             }
@@ -235,6 +237,7 @@ public partial class ControlPanelWindow : Window
             await _session.StartAsync(selected, _profile);
 
             SetStartButtonState(_session.IsRunning);
+            UpdateTranslateModeHint();
         }
         catch (Exception ex)
         {
@@ -267,7 +270,7 @@ public partial class ControlPanelWindow : Window
 
     private TranslationSession CreateSession()
     {
-        var session = new TranslationSession(_settings.Translator, Dispatcher);
+        var session = new TranslationSession(_settings.Translator, _settings.InstallRoot, Dispatcher);
         session.Status += (_, message) => StatusText.Text = message;
 
         // The panel remembers where it was dragged to, per game.
@@ -280,6 +283,7 @@ public partial class ControlPanelWindow : Window
         session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
         session.SetRegionVisible(ShowRegionToggle.IsChecked == true);
         session.SetClickThrough(ClickThrough);
+        session.SetAutomaticTranslation(AutoTranslateToggle.IsChecked == true);
 
         return session;
     }
@@ -319,7 +323,7 @@ public partial class ControlPanelWindow : Window
                 break;
 
             case HotKeyAction.TranslateOnce:
-                StatusText.Text = "โหมดแปลครั้งเดียวยังไม่พร้อมใช้งาน";
+                _ = TranslateOnceAsync();
                 break;
         }
     }
@@ -333,6 +337,52 @@ public partial class ControlPanelWindow : Window
         _session?.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
         _session?.SetRegionVisible(ShowRegionToggle.IsChecked == true);
     }
+
+    private void OnAutoTranslateChanged(object sender, RoutedEventArgs e)
+    {
+        // Fires during InitializeComponent, before the hint exists.
+        if (TranslateModeHint is null)
+        {
+            return;
+        }
+
+        _session?.SetAutomaticTranslation(AutoTranslateToggle.IsChecked == true);
+        UpdateTranslateModeHint();
+    }
+
+    private void UpdateTranslateModeHint()
+    {
+        bool automatic = AutoTranslateToggle.IsChecked == true;
+        bool running = _session?.IsRunning == true;
+
+        TranslateModeHint.Text = automatic
+            ? "แปลอัตโนมัติ: แปลให้เองทุกครั้งที่ข้อความในพื้นที่เปลี่ยนและนิ่งแล้ว"
+            : "แปลเอง: จะแปลเมื่อกด “แปลครั้งเดียว” หรือ Ctrl+Alt+S เท่านั้น — เซสชันยังทำงานอยู่ โมเดลจึงตอบทันที";
+
+        // Only meaningful while a session is attached to a game.
+        TranslateOnceButton.IsEnabled = running;
+    }
+
+    private async Task TranslateOnceAsync()
+    {
+        if (_session?.IsRunning != true)
+        {
+            StatusText.Text = "ยังไม่ได้เริ่มแปล — กด “เริ่มแปล” ก่อน";
+            return;
+        }
+
+        try
+        {
+            await _session.TranslateOnceAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "On-demand translation failed.");
+            StatusText.Text = $"แปลไม่สำเร็จ: {ex.Message}";
+        }
+    }
+
+    private void OnTranslateOnceClick(object sender, RoutedEventArgs e) => _ = TranslateOnceAsync();
 
     private void OnMouseModeChanged(object sender, RoutedEventArgs e)
     {
@@ -386,7 +436,7 @@ public partial class ControlPanelWindow : Window
         // player switches model or moves the work between CPU and GPU.
         new SetupWindow(_settings) { Owner = this }.ShowDialog();
 
-        StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator)
+        StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator, _settings.InstallRoot)
             ? "โมเดลพร้อมใช้งานแล้ว"
             : "ยังตั้งค่าโมเดลไม่ครบ — ยังแปลไม่ได้";
     }

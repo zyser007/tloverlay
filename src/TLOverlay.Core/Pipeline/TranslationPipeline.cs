@@ -67,6 +67,15 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
     public PipelineMetrics Metrics { get; } = new();
 
+    /// <summary>
+    /// Whether the pipeline translates on its own as the screen changes.
+    ///
+    /// Turning it off leaves the session running - capture stays attached and the
+    /// model stays loaded - so a single on-demand translation is instant rather
+    /// than paying for a cold start.
+    /// </summary>
+    public bool AutomaticTranslation { get; set; } = true;
+
     public bool IsRunning => _loop is { IsCompleted: false };
 
     public async Task StartAsync(IntPtr windowHandle, GameProfile profile)
@@ -148,9 +157,13 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
                 bool anyWork = false;
 
-                foreach (var state in _regions.Values)
+                if (AutomaticTranslation)
                 {
-                    anyWork |= await ProcessRegionAsync(state, frame, cancellationToken).ConfigureAwait(false);
+                    foreach (var state in _regions.Values)
+                    {
+                        anyWork |= await ProcessRegionAsync(state, frame, force: false, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
                 }
 
                 Metrics.RecordFrame(captureMs, skipped: !anyWork);
@@ -171,16 +184,44 @@ public sealed class TranslationPipeline : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Translates the region right now, whether or not anything changed and
+    /// whether or not automatic translation is on.
+    ///
+    /// Deliberately bypasses both gates. Someone who asks for a translation has
+    /// already decided the text is worth reading again; answering "nothing
+    /// changed" would be technically true and useless.
+    /// </summary>
+    public async Task TranslateOnceAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        CapturedFrame? frame = await _capture.GrabAsync(cancellationToken).ConfigureAwait(false);
+
+        if (frame is null)
+        {
+            return;
+        }
+
+        foreach (var state in _regions.Values)
+        {
+            await ProcessRegionAsync(state, frame, force: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Returns true if this region did work beyond change detection.</summary>
     private async Task<bool> ProcessRegionAsync(
         RegionState state,
         CapturedFrame frame,
+        bool force,
         CancellationToken cancellationToken)
     {
         var (x, y, width, height) = state.Region.ToPixels(frame.Width, frame.Height);
         CapturedFrame crop = frame.Crop(x, y, width, height);
 
-        if (state.Detector.Observe(crop.Signature(), DateTimeOffset.UtcNow) != ChangeState.Settled)
+        ChangeState change = state.Detector.Observe(crop.Signature(), DateTimeOffset.UtcNow);
+
+        if (!force && change != ChangeState.Settled)
         {
             return false;
         }
@@ -206,7 +247,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
         // Second line of defence against mid-reveal text: if the new reading is
         // the old one plus more characters and still has no sentence ending, the
         // game is typing. Re-arm and wait rather than translating a fragment.
-        if (state.LastSourceText.Length > 0
+        if (!force
+            && state.LastSourceText.Length > 0
             && sourceText.StartsWith(state.LastSourceText, StringComparison.Ordinal)
             && !TextAssembler.LooksComplete(sourceText))
         {
@@ -214,7 +256,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
             return true;
         }
 
-        if (TextSimilarity.Ratio(sourceText, state.LastSourceText) >= SameTextThreshold)
+        if (!force && TextSimilarity.Ratio(sourceText, state.LastSourceText) >= SameTextThreshold)
         {
             // Same line, read slightly differently. Not worth a translation.
             return true;

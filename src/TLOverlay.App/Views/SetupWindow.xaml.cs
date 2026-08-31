@@ -81,13 +81,16 @@ public partial class SetupWindow : Window
 
     private LlamaBackend Backend => GpuOption.IsChecked == true ? LlamaBackend.Cuda : LlamaBackend.Cpu;
 
+    /// <summary>Folder holding runtime\ and models\.</summary>
+    private string InstallRoot => _settings.InstallRoot ?? AppPaths.DataDirectory;
+
     private string ServerTarget =>
         _settings.Translator.ExecutablePath
-        ?? TranslatorFactory.ResolveDefault(TranslatorFactory.DefaultExecutableRelativePath);
+        ?? TranslatorFactory.ResolveDefault(TranslatorFactory.DefaultExecutableRelativePath, InstallRoot);
 
     private string ModelTarget =>
         _settings.Translator.ModelPath
-        ?? TranslatorFactory.ResolveDefault(TranslatorFactory.DefaultModelRelativePath);
+        ?? TranslatorFactory.ResolveDefault(TranslatorFactory.DefaultModelRelativePath, InstallRoot);
 
     private void RefreshState()
     {
@@ -105,6 +108,19 @@ public partial class SetupWindow : Window
         DoneButton.IsEnabled = hasServer && hasModel && !_busy;
         ServerDownloadButton.IsEnabled = !_busy;
         ModelDownloadButton.IsEnabled = !_busy && SelectedModel is not null;
+
+        InstallPathText.Text = InstallRoot;
+
+        long? free = InstallLocation.FreeSpaceBytes(InstallRoot);
+        long needed = SelectedModel?.ApproximateBytes ?? 0;
+
+        // Saying "not enough room" before the download beats failing at the end
+        // of one, which is where this used to be discovered.
+        FreeSpaceText.Text = free is null
+            ? "ไม่ทราบพื้นที่ว่างของไดรฟ์นี้"
+            : needed > 0 && free < needed + (512L * 1024 * 1024)
+                ? $"พื้นที่ว่าง {FormatBytes(free.Value)} — อาจไม่พอสำหรับโมเดลที่เลือก ({FormatBytes(needed)})"
+                : $"พื้นที่ว่าง {FormatBytes(free.Value)}";
 
         LogHint.Text = $"ถ้าดาวน์โหลดไม่สำเร็จ ดูรายละเอียดได้ที่ {AppPaths.LogsDirectory}";
 
@@ -365,6 +381,125 @@ public partial class SetupWindow : Window
         };
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    /// <summary>
+    /// Moves the install somewhere with room, or just points future downloads at
+    /// it. Offered because the system drive is very often the full one, and the
+    /// model is the only large thing this app writes.
+    /// </summary>
+    private async void OnChangeInstallLocationClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "เลือกโฟลเดอร์สำหรับเก็บเซิร์ฟเวอร์และโมเดล",
+            Multiselect = false,
+        };
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        string newRoot = dialog.FolderName;
+        string oldRoot = InstallRoot;
+
+        if (string.Equals(Path.GetFullPath(newRoot), Path.GetFullPath(oldRoot), StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!InstallLocation.IsWritable(newRoot))
+        {
+            Status("เขียนไฟล์ในโฟลเดอร์นี้ไม่ได้ — เลือกที่อื่น");
+            return;
+        }
+
+        string oldRuntime = Path.Combine(oldRoot, "runtime");
+        string oldModels = Path.Combine(oldRoot, "models");
+
+        bool anythingInstalled = Directory.Exists(oldRuntime) || Directory.Exists(oldModels);
+        bool move = false;
+
+        if (anythingInstalled)
+        {
+            var answer = MessageBox.Show(
+                $"ย้ายไฟล์ที่ติดตั้งไว้แล้วไปที่\n{newRoot}\nด้วยหรือไม่?\n\n" +
+                "เลือก No เพื่อเปลี่ยนเฉพาะตำแหน่งของการดาวน์โหลดครั้งต่อไป",
+                "TLOverlay",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+
+            if (answer == MessageBoxResult.Cancel)
+            {
+                return;
+            }
+
+            move = answer == MessageBoxResult.Yes;
+        }
+
+        if (!move)
+        {
+            ApplyInstallRoot(newRoot, oldRoot, rebasePaths: false);
+            Status($"การดาวน์โหลดครั้งต่อไปจะเก็บไว้ที่ {newRoot}");
+            return;
+        }
+
+        await RunAsync("install move", async (_, token) =>
+        {
+            Status("กำลังย้ายไฟล์…");
+
+            var relay = new Progress<double>(fraction =>
+            {
+                DownloadBar.IsIndeterminate = false;
+                DownloadBar.Value = fraction;
+                ProgressLeft.Text = $"{fraction:P0}";
+                ProgressRight.Text = "กำลังย้ายไฟล์";
+            });
+
+            await InstallLocation.MoveDirectoryAsync(oldRuntime, Path.Combine(newRoot, "runtime"), relay, token);
+            await InstallLocation.MoveDirectoryAsync(oldModels, Path.Combine(newRoot, "models"), relay, token);
+
+            ApplyInstallRoot(newRoot, oldRoot, rebasePaths: true);
+            Status($"ย้ายไปที่ {newRoot} เรียบร้อยแล้ว");
+        });
+    }
+
+    private void ApplyInstallRoot(string newRoot, string oldRoot, bool rebasePaths)
+    {
+        _settings.InstallRoot = newRoot;
+
+        if (rebasePaths)
+        {
+            _settings.Translator.ExecutablePath = Rebase(_settings.Translator.ExecutablePath, oldRoot, newRoot);
+            _settings.Translator.ModelPath = Rebase(_settings.Translator.ModelPath, oldRoot, newRoot);
+        }
+
+        SaveSettings();
+        RefreshState();
+    }
+
+    /// <summary>
+    /// Points a stored path at the new root, and leaves alone anything that was
+    /// never under the old one - a file picked with Browse from somewhere else
+    /// must not be rewritten to a place it was never moved to.
+    /// </summary>
+    internal static string? Rebase(string? path, string oldRoot, string newRoot)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return path;
+        }
+
+        string full = Path.GetFullPath(path);
+        string previous = Path.GetFullPath(oldRoot).TrimEnd(Path.DirectorySeparatorChar);
+
+        if (!full.StartsWith(previous + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        return Path.Combine(newRoot, Path.GetRelativePath(previous, full));
     }
 
     private void OnCancelDownloadClick(object sender, RoutedEventArgs e) => _download?.Cancel();

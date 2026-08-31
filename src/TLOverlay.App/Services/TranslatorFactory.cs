@@ -35,6 +35,7 @@ public static class TranslatorFactory
         TranslatorSettings settings,
         GameProfile profile,
         string cacheDirectory,
+        string? installRoot,
         out SqliteTranslationCache persistentCache)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -42,8 +43,8 @@ public static class TranslatorFactory
 
         var options = new LlamaServerOptions
         {
-            ExecutablePath = settings.ExecutablePath ?? ResolveDefault(DefaultExecutableRelativePath),
-            ModelPath = settings.ModelPath ?? ResolveDefault(DefaultModelRelativePath),
+            ExecutablePath = settings.ExecutablePath ?? ResolveDefault(DefaultExecutableRelativePath, installRoot),
+            ModelPath = settings.ModelPath ?? ResolveDefault(DefaultModelRelativePath, installRoot),
             ModelId = settings.ModelId,
             GpuLayers = settings.GpuLayers,
             Port = settings.Port,
@@ -68,7 +69,7 @@ public static class TranslatorFactory
     /// because that is where downloads would be lost (launched from an archive)
     /// or refused (installed under Program Files).
     /// </summary>
-    public static string ResolveDefault(string relativePath)
+    public static string ResolveDefault(string relativePath, string? installRoot = null)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
@@ -83,10 +84,10 @@ public static class TranslatorFactory
             directory = directory.Parent;
         }
 
-        return Path.Combine(AppPaths.DataDirectory, relativePath);
+        return Path.Combine(installRoot ?? AppPaths.DataDirectory, relativePath);
     }
 
-    public static bool IsModelInstalled(TranslatorSettings settings) =>
-        File.Exists(settings.ExecutablePath ?? ResolveDefault(DefaultExecutableRelativePath))
-        && File.Exists(settings.ModelPath ?? ResolveDefault(DefaultModelRelativePath));
+    public static bool IsModelInstalled(TranslatorSettings settings, string? installRoot = null) =>
+        File.Exists(settings.ExecutablePath ?? ResolveDefault(DefaultExecutableRelativePath, installRoot))
+        && File.Exists(settings.ModelPath ?? ResolveDefault(DefaultModelRelativePath, installRoot));
 }

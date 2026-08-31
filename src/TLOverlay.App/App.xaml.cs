@@ -52,7 +52,7 @@ public partial class App : Application
 
         var settings = SettingsStore.Load(DataDirectory);
 
-        if (!TranslatorFactory.IsModelInstalled(settings.Translator))
+        if (!TranslatorFactory.IsModelInstalled(settings.Translator, settings.InstallRoot))
         {
             new SetupWindow(settings).ShowDialog();
         }

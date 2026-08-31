@@ -9,6 +9,16 @@ public sealed class AppSettings
 
     /// <summary>Profile to use when no per-game profile matches.</summary>
     public string DefaultProfileName { get; set; } = "Default";
+
+    /// <summary>
+    /// Folder that holds runtime\ and models\. Null means the per-user data
+    /// directory.
+    ///
+    /// Separate from the data directory because the model is gigabytes and the
+    /// system drive is often the one that is full, while settings, profiles and
+    /// logs are tiny and belong where Windows expects them.
+    /// </summary>
+    public string? InstallRoot { get; set; }
 }
 
 /// <summary>Reads and writes settings.json under %AppData%\TLOverlay.</summary>
