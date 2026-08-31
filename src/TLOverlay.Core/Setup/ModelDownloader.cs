@@ -15,6 +15,9 @@ public enum FileSignature
 
     /// <summary>"PK\x03\x04" - a zip archive.</summary>
     Zip,
+
+    /// <summary>"MZ" - a Windows executable.</summary>
+    WindowsExecutable,
 }
 
 public sealed record DownloadProgress(long BytesCompleted, long? TotalBytes, double BytesPerSecond)
@@ -236,6 +239,7 @@ public sealed class ModelDownloader
         {
             FileSignature.Gguf => "GGUF"u8.ToArray(),
             FileSignature.Zip => [0x50, 0x4B, 0x03, 0x04],
+            FileSignature.WindowsExecutable => "MZ"u8.ToArray(),
             _ => [],
         };
 

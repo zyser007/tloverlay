@@ -19,11 +19,50 @@
   -->
   <Grid Margin="18">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+    <!--
+      A new version, announced where it cannot be missed and cannot interrupt.
+      Above the scroll rather than inside it, because an update that scrolls out
+      of sight is one nobody installs; a banner rather than a dialog, because the
+      player may well be in a game.
+    -->
+    <Border x:Name="UpdateBanner" Grid.Row="0" Visibility="Collapsed"
+            Background="{StaticResource AccentSoftBackground}"
+            BorderBrush="{StaticResource AccentSoftBorder}"
+            BorderThickness="1" CornerRadius="6" Padding="14,12" Margin="0,0,0,12">
+      <StackPanel>
+        <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock x:Name="UpdateDetail" TextWrapping="Wrap" FontSize="12"
+                   Foreground="{StaticResource PanelMuted}" Margin="0,4,0,0" />
+
+        <ProgressBar x:Name="UpdateProgress" Height="6" Minimum="0" Maximum="1"
+                     Visibility="Collapsed" Margin="0,10,0,0"
+                     Background="{StaticResource TrackBackground}"
+                     Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
+
+        <WrapPanel x:Name="UpdateActions" Margin="0,10,0,0">
+          <Button x:Name="UpdateInstallButton" Click="OnUpdateInstallClick"
+                  Padding="12,6" MinWidth="0" Margin="0,0,8,0">
+            <StackPanel Orientation="Horizontal">
+              <Path Data="{StaticResource IconDownload}" Style="{StaticResource ButtonIcon}" />
+              <TextBlock Text="อัพเดทเลย" />
+            </StackPanel>
+          </Button>
+
+          <Button x:Name="UpdateNotesButton" Content="ดูรายละเอียด" Click="OnUpdateNotesClick"
+                  Padding="12,6" MinWidth="0" Margin="0,0,8,0" />
+
+          <Button x:Name="UpdateSkipButton" Content="ข้ามรุ่นนี้" Click="OnUpdateSkipClick"
+                  Padding="12,6" MinWidth="0" />
+        </WrapPanel>
+      </StackPanel>
+    </Border>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                   Padding="0,0,4,0">
       <StackPanel>
 
@@ -167,6 +206,31 @@
           </StackPanel>
         </Border>
 
+        <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+          <StackPanel>
+            <TextBlock Text="การอัพเดทโปรแกรม" Style="{StaticResource CardHeading}" />
+
+            <TextBlock x:Name="VersionText" Foreground="{StaticResource PanelMuted}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,0,0,8" />
+
+            <WrapPanel>
+              <ComboBox x:Name="UpdatePolicyCombo" Width="220" Padding="8,5" Margin="0,0,10,6"
+                        SelectionChanged="OnUpdatePolicyChanged" />
+
+              <Button x:Name="CheckUpdatesButton" Click="OnCheckUpdatesClick"
+                      Padding="12,6" MinWidth="0" Margin="0,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                  <Path Data="{StaticResource IconRefresh}" Style="{StaticResource ButtonIcon}" />
+                  <TextBlock Text="ตรวจสอบตอนนี้" />
+                </StackPanel>
+              </Button>
+            </WrapPanel>
+
+            <TextBlock x:Name="UpdateHint" Foreground="{StaticResource PanelMuted}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,4,0,0" />
+          </StackPanel>
+        </Border>
+
       </StackPanel>
     </ScrollViewer>
 
@@ -175,7 +239,7 @@
       keep them there: dropping "เริ่มแปล" onto a second row on its own looked
       like a mistake rather than a layout.
     -->
-    <WrapPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,14,0,0">
+    <WrapPanel Grid.Row="2" HorizontalAlignment="Right" Margin="0,14,0,0">
       <Button Click="OnSetupClick" Margin="0,0,10,6">
         <StackPanel Orientation="Horizontal">
           <Path Data="{StaticResource IconModel}" Style="{StaticResource ButtonIcon}" />

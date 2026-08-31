@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using Serilog;
@@ -11,8 +12,25 @@ public partial class App : Application
 {
     public static string DataDirectory => AppPaths.DataDirectory;
 
+    /// <summary>The running version, as the updater compares it against tags.</summary>
+    public static Version Version { get; } = Core.Update.AppVersion.Parse(
+        Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString());
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        // Answered before anything else is set up, because the thing asking is
+        // the updater smoke-testing a freshly downloaded build: it needs to know
+        // this executable starts and is the version it claims, and it should not
+        // have to wait for logging, windows or a settings file to find out.
+        if (e.Args.Any(static arg => string.Equals(arg, "--version", StringComparison.OrdinalIgnoreCase)))
+        {
+            Console.Out.WriteLine(Version.ToString());
+            Console.Out.Flush();
+            Shutdown(0);
+            return;
+        }
+
         AppPaths.EnsureCreated();
 
         Log.Logger = new LoggerConfiguration()
@@ -49,6 +67,10 @@ public partial class App : Application
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
+
+        // If an update was interrupted between its two renames, this is what puts
+        // the program back.
+        UpdateService.CleanUpAfterUpdate();
 
         var settings = SettingsStore.Load(DataDirectory);
 

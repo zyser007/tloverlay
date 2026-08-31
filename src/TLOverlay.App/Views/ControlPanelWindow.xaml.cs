@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -8,6 +10,8 @@ using TLOverlay.App.Interop;
 using TLOverlay.App.Services;
 using TLOverlay.Core.Capture;
 using TLOverlay.Core.Profiles;
+using TLOverlay.Core.Setup;
+using TLOverlay.Core.Update;
 
 namespace TLOverlay.App.Views;
 
@@ -32,10 +36,13 @@ public partial class ControlPanelWindow : Window
     private readonly AppSettings _settings = SettingsStore.Load(App.DataDirectory);
     private readonly GlobalHotKeyService _hotKeys = new();
     private readonly DispatcherTimer _metricsTimer;
+    private readonly UpdateService _updates;
 
     private TranslationSession? _session;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
+    private UpdateManifest? _availableUpdate;
     private bool _busy;
+    private bool _updating;
 
     public ControlPanelWindow()
     {
@@ -59,7 +66,17 @@ public partial class ControlPanelWindow : Window
         _metricsTimer.Tick += (_, _) => UpdateMetrics();
         _metricsTimer.Start();
 
-        Loaded += (_, _) => Refresh();
+        _updates = new UpdateService(_settings);
+        BuildUpdateCard();
+
+        Loaded += (_, _) =>
+        {
+            Refresh();
+
+            // After the panel is up, never before it: a check that blocks the
+            // first paint would make a slow connection look like a slow program.
+            _ = CheckForUpdatesAsync(force: false);
+        };
         Closed += OnClosed;
 
         if (failed.Count > 0)
@@ -456,6 +473,226 @@ public partial class ControlPanelWindow : Window
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
+
+    /// <summary>
+    /// Fills the update card. Built in code so the policy list and the running
+    /// version come from one place rather than being restated in XAML.
+    /// </summary>
+    private void BuildUpdateCard()
+    {
+        UpdatePolicyCombo.ItemsSource = new[]
+        {
+            new PolicyChoice(UpdatePolicy.Notify, "แจ้งเตือนเมื่อมีเวอร์ชันใหม่"),
+            new PolicyChoice(UpdatePolicy.Automatic, "ดาวน์โหลดให้อัตโนมัติ"),
+            new PolicyChoice(UpdatePolicy.Off, "ไม่ต้องตรวจสอบ"),
+        };
+
+        UpdatePolicyCombo.DisplayMemberPath = nameof(PolicyChoice.Label);
+        UpdatePolicyCombo.SelectedItem = ((PolicyChoice[])UpdatePolicyCombo.ItemsSource)
+            .FirstOrDefault(choice => choice.Policy == _settings.Updates);
+
+        VersionText.Text = $"เวอร์ชันปัจจุบัน {App.Version}";
+
+        UpdateHint.Text = UpdateService.CanSelfUpdate
+            ? string.Empty
+            : "โฟลเดอร์ที่ติดตั้งอยู่เขียนไฟล์ไม่ได้ จึงอัพเดทให้อัตโนมัติไม่ได้ — ต้องดาวน์โหลดมาแทนที่เอง";
+    }
+
+    private void OnUpdatePolicyChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || UpdatePolicyCombo.SelectedItem is not PolicyChoice choice)
+        {
+            return;
+        }
+
+        _updates.SetPolicy(choice.Policy);
+    }
+
+    private void OnCheckUpdatesClick(object sender, RoutedEventArgs e) => _ = CheckForUpdatesAsync(force: true);
+
+    /// <summary>
+    /// Looks for a new version. <paramref name="force"/> is the player pressing
+    /// the button, which reports "you are up to date" rather than saying nothing.
+    /// </summary>
+    private async Task CheckForUpdatesAsync(bool force)
+    {
+        if (_updating)
+        {
+            return;
+        }
+
+        try
+        {
+            if (force)
+            {
+                CheckUpdatesButton.IsEnabled = false;
+                UpdateHint.Text = "กำลังตรวจสอบ…";
+            }
+
+            UpdateManifest? found = await _updates.CheckAsync(force);
+
+            if (found is null)
+            {
+                if (force)
+                {
+                    UpdateHint.Text = $"ใช้เวอร์ชันล่าสุดอยู่แล้ว ({App.Version})";
+                }
+
+                return;
+            }
+
+            _availableUpdate = found;
+            ShowUpdateBanner(found);
+
+            if (_settings.Updates == UpdatePolicy.Automatic && UpdateService.CanSelfUpdate)
+            {
+                await InstallUpdateAsync(found);
+            }
+        }
+        catch (Exception ex) when (ex is UpdateCheckException or HttpRequestException or TaskCanceledException)
+        {
+            Log.Warning(ex, "Update check failed.");
+
+            // Only ever said out loud when the player asked: a background check
+            // that cannot reach GitHub is not their problem to hear about.
+            if (force)
+            {
+                UpdateHint.Text = $"ตรวจสอบไม่สำเร็จ: {ex.Message}";
+            }
+        }
+        finally
+        {
+            CheckUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    private void ShowUpdateBanner(UpdateManifest manifest)
+    {
+        UpdateTitle.Text = $"มีเวอร์ชันใหม่ {manifest.Version}";
+
+        UpdateDetail.Text = UpdateService.CanSelfUpdate
+            ? $"ดาวน์โหลด {manifest.MegabytesApproximately:F0} MB แล้วเปิดโปรแกรมใหม่ให้อัตโนมัติ · เวอร์ชันปัจจุบัน {App.Version}"
+            : $"โฟลเดอร์นี้เขียนไฟล์ไม่ได้ จึงต้องดาวน์โหลดมาแทนที่เอง · เวอร์ชันปัจจุบัน {App.Version}";
+
+        UpdateInstallButton.IsEnabled = UpdateService.CanSelfUpdate;
+        UpdateBanner.Visibility = Visibility.Visible;
+    }
+
+    private void OnUpdateNotesClick(object sender, RoutedEventArgs e)
+    {
+        if (_availableUpdate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                _availableUpdate.ReleasePage.ToString())
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not open the release page.");
+            StatusText.Text = $"เปิดหน้า release ไม่ได้: {_availableUpdate.ReleasePage}";
+        }
+    }
+
+    private void OnUpdateSkipClick(object sender, RoutedEventArgs e)
+    {
+        if (_availableUpdate is not null)
+        {
+            _updates.Skip(_availableUpdate);
+        }
+
+        _availableUpdate = null;
+        UpdateBanner.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnUpdateInstallClick(object sender, RoutedEventArgs e)
+    {
+        if (_availableUpdate is not null)
+        {
+            _ = InstallUpdateAsync(_availableUpdate);
+        }
+    }
+
+    /// <summary>
+    /// Installs an update and restarts into it.
+    ///
+    /// Stopping a running session first is not tidiness: the overlay owns a
+    /// capture session and a model server held in a job object, and replacing the
+    /// executable underneath all that is how a player ends up with an orphaned
+    /// llama-server holding two gigabytes.
+    /// </summary>
+    private async Task InstallUpdateAsync(UpdateManifest manifest)
+    {
+        if (_updating)
+        {
+            return;
+        }
+
+        if (_session?.IsRunning == true)
+        {
+            MessageBoxResult answer = MessageBox.Show(
+                $"ต้องหยุดการแปลก่อนอัพเดทเป็น {manifest.Version}\n\nหยุดแล้วอัพเดทเลยไหม?",
+                "TLOverlay",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            await ToggleAsync();
+        }
+
+        _updating = true;
+        UpdateActions.IsEnabled = false;
+        UpdateProgress.Visibility = Visibility.Visible;
+
+        var progress = new Progress<DownloadProgress>(report =>
+        {
+            UpdateProgress.IsIndeterminate = report.Fraction is null;
+            UpdateProgress.Value = report.Fraction ?? 0;
+            UpdateDetail.Text =
+                $"กำลังดาวน์โหลด {report.BytesCompleted / 1024d / 1024d:F0} / {manifest.MegabytesApproximately:F0} MB";
+        });
+
+        try
+        {
+            UpdateTitle.Text = $"กำลังอัพเดทเป็น {manifest.Version}";
+
+            if (await _updates.InstallAndRestartAsync(manifest, progress))
+            {
+                // The new build is already starting; this one steps out of its way.
+                Application.Current.Shutdown();
+                return;
+            }
+
+            UpdateTitle.Text = "อัพเดทไม่สำเร็จ";
+            UpdateDetail.Text =
+                "ไฟล์ที่ดาวน์โหลดมาเปิดไม่ผ่านการทดสอบ จึงไม่ได้ติดตั้งทับ — เวอร์ชันเดิมยังใช้งานได้ตามปกติ";
+        }
+        catch (Exception ex) when (ex is UpdateInstallException or ModelDownloadException or HttpRequestException or IOException)
+        {
+            Log.Error(ex, "Update to {Version} failed.", manifest.Version);
+            UpdateTitle.Text = "อัพเดทไม่สำเร็จ";
+            UpdateDetail.Text = ex.Message;
+        }
+        finally
+        {
+            _updating = false;
+            UpdateActions.IsEnabled = true;
+            UpdateProgress.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>One row of the update policy dropdown.</summary>
+    private sealed record PolicyChoice(UpdatePolicy Policy, string Label);
 
     private async void OnClosed(object? sender, EventArgs e)
     {

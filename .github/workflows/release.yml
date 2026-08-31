@@ -64,6 +64,36 @@ jobs:
           Compress-Archive -Path artifacts/TLOverlay-win-x64/* `
             -DestinationPath "TLOverlay-${{ steps.version.outputs.version }}-win-x64.zip"
 
+          # The bare executable as well as the zip. People download the zip;
+          # the in-app updater takes this, so an update is one file and no
+          # unpacking step that could half-succeed.
+          Copy-Item artifacts/TLOverlay-win-x64/TLOverlay.exe TLOverlay.exe
+
+      # The executable is unsigned, so this file is the only thing that lets the
+      # updater tell a real release from whatever else arrives over the wire. It
+      # refuses to install anything it cannot match against these hashes.
+      - name: Write the checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "TLOverlay.exe",
+            "TLOverlay-${{ steps.version.outputs.version }}-win-x64.zip"
+          )
+
+          $lines = foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLower()
+            "$hash *$(Split-Path -Leaf $file)"
+          }
+
+          # ASCII with Unix line endings: what sha256sum -c reads, and what the
+          # updater's parser expects.
+          [IO.File]::WriteAllText(
+            (Join-Path $PWD 'SHA256SUMS.txt'),
+            ($lines -join "`n") + "`n",
+            [Text.UTF8Encoding]::new($false))
+
+          Get-Content SHA256SUMS.txt
+
       - name: Create the GitHub release
         shell: pwsh
         env:
@@ -71,5 +101,7 @@ jobs:
         run: |
           gh release create "v${{ steps.version.outputs.version }}" `
             "TLOverlay-${{ steps.version.outputs.version }}-win-x64.zip" `
+            "TLOverlay.exe" `
+            "SHA256SUMS.txt" `
             --title "TLOverlay ${{ steps.version.outputs.version }}" `
             --generate-notes

@@ -6,6 +6,18 @@ Fullscreen (borderless)** on Windows 10 / 11.
 โปรแกรม overlay แปลอังกฤษเป็นไทยแบบเรียลไทม์ สำหรับเกมที่รันแบบ Windowed Fullscreen
 บน Windows 10/11 — ทำงานออฟไลน์ 100% ไม่ต้องต่อเน็ต ไม่ inject DLL เข้าเกม
 
+## Download
+
+**[Latest release](https://github.com/zyser007/tloverlay/releases/latest)** — download
+`TLOverlay-<version>-win-x64.zip`, unzip it somewhere writable, run `TLOverlay.exe`.
+
+Self-contained: no .NET runtime to install. Windows SmartScreen warns on first run
+because the executable is unsigned - "More info" then "Run anyway". Do not run it
+from inside the zip; the app says so if you try, because everything it downloads
+would be deleted with the archive's temp folder.
+
+After that it keeps itself up to date - see [Updates](#updates).
+
 ## How it works
 
 ```
@@ -182,6 +194,19 @@ The tag is what triggers `.github/workflows/release.yml`: it runs the tests,
 publishes, zips, and creates the GitHub Release with generated notes. Nothing
 else publishes a release, so a tag always corresponds to something that shipped.
 
+A release carries three assets, and the updater needs all three shapes to be
+right:
+
+| Asset | For |
+|---|---|
+| `TLOverlay-<version>-win-x64.zip` | people downloading by hand |
+| `TLOverlay.exe` | the in-app updater - one file, no unpacking |
+| `SHA256SUMS.txt` | what the updater checks the download against |
+
+A release missing the executable or the checksums is simply not offered as an
+update. That is deliberate: the binary is unsigned, so those hashes are the only
+thing standing between the updater and whatever arrived over the wire.
+
 CI runs the same publish command on every push and uploads the result as a build
 artifact. A publish that has stopped working is therefore caught on the commit
 that broke it, not while cutting a tag.
@@ -202,7 +227,44 @@ that tells you whether change detection is doing its job - below roughly 80%
 during play means a region is picking up animated scenery.
 
 Not built yet: the NLLB ONNX backend as a lighter alternative to the local LLM,
-automatic region detection, and in-app updates.
+and automatic region detection.
+
+## Updates
+
+The app checks GitHub for a newer release once a day, on startup, and says so
+with a banner on the control panel. Nothing is downloaded until you press the
+button. Three settings, under **การอัพเดทโปรแกรม**:
+
+| Setting | What it does |
+|---|---|
+| แจ้งเตือน (default) | Checks and tells you. You decide when. |
+| ดาวน์โหลดอัตโนมัติ | Checks, downloads and restarts into it. |
+| ไม่ต้องตรวจสอบ | Never contacts GitHub. |
+
+Notify is the default because this program runs beside a game: a background
+download of 70 MB is not something to start on someone's connection mid-session.
+For the same reason it is a banner rather than a dialog, and installing stops a
+running translation session first - replacing the executable underneath a live
+capture session and a model server held in a job object is how you end up with an
+orphaned `llama-server` sitting on two gigabytes.
+
+**How the swap works.** Windows will not let a running executable be overwritten,
+but it will let one be renamed. So there is no separate updater program to
+install, keep in sync, or fail to clean up: the running exe becomes
+`TLOverlay.exe.old`, the new one takes its name, the app restarts and deletes the
+leftover. If the update dies between those two renames - the one moment the folder
+can hold a `.old` and no program - the next startup puts the old one back.
+
+**What is checked before anything is replaced**, in order: the download starts
+with `MZ`, its SHA-256 matches `SHA256SUMS.txt` from the release, and the new
+build runs `--version` and answers with the version it claims. Only then is
+anything renamed. That last check is not paranoia - a publish can be broken in
+ways that only appear at startup, and finding out here means you keep a working
+program instead of one that no longer opens.
+
+Installed somewhere unwritable (Program Files, read-only media), the app says so
+and sends you to the release page rather than asking for administrator rights an
+overlay has no business holding.
 
 ## Memory
 
