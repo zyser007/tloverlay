@@ -42,6 +42,14 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly Dictionary<string, RegionState> _regions = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// One grab at a time. The capture source keeps a single pending request and
+    /// completes an older one with null when a newer arrives, so an on-demand
+    /// translation firing between the loop's poll and its frame would hand the
+    /// loop a null - which it reads as "the game exited".
+    /// </summary>
+    private readonly SemaphoreSlim _grabGate = new(1, 1);
+
     private CancellationTokenSource? _loopCancellation;
     private Task? _loop;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
@@ -146,13 +154,21 @@ public sealed class TranslationPipeline : IAsyncDisposable
             try
             {
                 stopwatch.Restart();
-                CapturedFrame? frame = await _capture.GrabAsync(cancellationToken).ConfigureAwait(false);
+                CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
                 double captureMs = stopwatch.Elapsed.TotalMilliseconds;
 
                 if (frame is null)
                 {
-                    // Capture stopped - usually the game exited.
-                    break;
+                    if (!_capture.IsRunning)
+                    {
+                        // Capture stopped - usually the game exited.
+                        break;
+                    }
+
+                    // A frame that never arrived. Poll again rather than treating
+                    // one empty grab as the end of the session.
+                    await Task.Delay(_profile.PollIntervalMilliseconds, cancellationToken).ConfigureAwait(false);
+                    continue;
                 }
 
                 bool anyWork = false;
@@ -196,7 +212,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        CapturedFrame? frame = await _capture.GrabAsync(cancellationToken).ConfigureAwait(false);
+        CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
 
         if (frame is null)
         {
@@ -206,6 +222,21 @@ public sealed class TranslationPipeline : IAsyncDisposable
         foreach (var state in _regions.Values)
         {
             await ProcessRegionAsync(state, frame, force: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Serialises grabs, so the loop and an on-demand request cannot cancel each other.</summary>
+    private async Task<CapturedFrame?> GrabAsync(CancellationToken cancellationToken)
+    {
+        await _grabGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return await _capture.GrabAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _grabGate.Release();
         }
     }
 
@@ -338,6 +369,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
         _capture.Dispose();
         _ocr.Dispose();
+        _grabGate.Dispose();
         await _translator.DisposeAsync().ConfigureAwait(false);
     }
 
