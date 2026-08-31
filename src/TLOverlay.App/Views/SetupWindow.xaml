@@ -4,7 +4,7 @@
         Title="TLOverlay — ตั้งค่าครั้งแรก"
         Icon="/Assets/tloverlay.ico"
         Height="740" Width="620"
-        MinHeight="400" MinWidth="480"
+        MinHeight="400" MinWidth="520"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource PanelBackground}"
         FontFamily="{StaticResource ThaiUiFont}">
