@@ -112,17 +112,23 @@ public partial class ControlPanelWindow : Window
             return;
         }
 
-        var editor = new RegionEditorWindow(selected.Handle) { Owner = this };
+        // Hand the editor what already exists. It used to open blank and its
+        // result replaced the whole list, so adding a second region meant losing
+        // the first and there was no way to see where the existing one sat.
+        var editor = new RegionEditorWindow(selected.Handle, _profile.Regions) { Owner = this };
 
         if (editor.ShowDialog() != true || editor.Result is null)
         {
             return;
         }
 
-        _profile.Regions = [editor.Result];
+        _profile.Regions = editor.Result.ToList();
         _profiles.Save(_profile);
 
-        StatusText.Text = $"บันทึกพื้นที่แปลของ {_profile.Name} แล้ว";
+        StatusText.Text = _profile.Regions.Count == 0
+            ? $"ลบพื้นที่แปลของ {_profile.Name} ทั้งหมดแล้ว"
+            : $"บันทึก {_profile.Regions.Count} พื้นที่ของ {_profile.Name} แล้ว: " +
+              string.Join(", ", _profile.Regions.Select(static r => r.Name));
 
         // A moved region invalidates everything the pipeline has settled on, so
         // restart rather than translating against stale coordinates.
@@ -192,6 +198,10 @@ public partial class ControlPanelWindow : Window
     {
         var session = new TranslationSession(_settings.Translator, Dispatcher);
         session.Status += (_, message) => StatusText.Text = message;
+
+        session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
+        session.SetRegionOutlinesVisible(ShowRegionsToggle.IsChecked == true);
+
         return session;
     }
 
@@ -207,8 +217,12 @@ public partial class ControlPanelWindow : Window
                 EditRegion();
                 break;
 
-            case HotKeyAction.ToggleOverlayVisible:
-                _session?.ToggleOverlayVisible();
+            case HotKeyAction.ToggleTranslations:
+                ShowTranslationsToggle.IsChecked = ShowTranslationsToggle.IsChecked != true;
+                break;
+
+            case HotKeyAction.ToggleRegionOutlines:
+                ShowRegionsToggle.IsChecked = ShowRegionsToggle.IsChecked != true;
                 break;
 
             case HotKeyAction.ToggleClickThrough:
@@ -249,6 +263,21 @@ public partial class ControlPanelWindow : Window
         StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator)
             ? "โมเดลพร้อมใช้งานแล้ว"
             : "ยังตั้งค่าโมเดลไม่ครบ — ยังแปลไม่ได้";
+    }
+
+    /// <summary>
+    /// Both the buttons and the hotkeys route through here, so the toggle state
+    /// on screen can never disagree with what the overlay is showing.
+    /// </summary>
+    private void OnLayerToggled(object sender, RoutedEventArgs e)
+    {
+        if (_session is null)
+        {
+            return;
+        }
+
+        _session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
+        _session.SetRegionOutlinesVisible(ShowRegionsToggle.IsChecked == true);
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();

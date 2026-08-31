@@ -53,4 +53,31 @@ public class CaptureRegionTests
     {
         Assert.Equal(expected, new CaptureRegion("r", x, y, w, h).IsValid);
     }
+
+    [Fact]
+    public void FirstRegionKeepsThePlainName()
+    {
+        Assert.Equal("Dialogue", CaptureRegion.UniqueName([]));
+    }
+
+    [Fact]
+    public void LaterRegionsAreNumberedRatherThanColliding()
+    {
+        // Regions are addressed by name by both the pipeline and the overlay, so
+        // a duplicate would make two of them share one detector and one panel.
+        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["Dialogue"]));
+        Assert.Equal("Dialogue 3", CaptureRegion.UniqueName(["Dialogue", "Dialogue 2"]));
+    }
+
+    [Fact]
+    public void GapsInTheNumberingAreReused()
+    {
+        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["Dialogue", "Dialogue 3"]));
+    }
+
+    [Fact]
+    public void NameComparisonIgnoresCase()
+    {
+        Assert.Equal("Dialogue 2", CaptureRegion.UniqueName(["dialogue"]));
+    }
 }

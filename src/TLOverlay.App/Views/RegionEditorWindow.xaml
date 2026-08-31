@@ -11,17 +11,13 @@
         Cursor="Cross">
 
   <Grid>
+    <!-- Existing regions are drawn here; the drag rectangle lives on top. -->
     <Canvas x:Name="Surface"
             Background="Transparent"
             MouseLeftButtonDown="OnMouseDown"
             MouseMove="OnMouseMove"
-            MouseLeftButtonUp="OnMouseUp">
-      <Rectangle x:Name="Selection"
-                 Stroke="#FF4C8DFF"
-                 StrokeThickness="2"
-                 Fill="#224C8DFF"
-                 Visibility="Collapsed" />
-    </Canvas>
+            MouseLeftButtonUp="OnMouseUp"
+            SizeChanged="OnSurfaceSizeChanged" />
 
     <Border VerticalAlignment="Top"
             HorizontalAlignment="Center"
@@ -29,11 +25,21 @@
             Padding="18,10"
             CornerRadius="8"
             Background="#EE14161B">
-      <TextBlock x:Name="Hint"
-                 Foreground="White"
-                 FontFamily="Leelawadee UI, Segoe UI"
-                 FontSize="15"
-                 Text="ลากเมาส์คลุมกล่องบทสนทนา — Enter เพื่อบันทึก, Esc เพื่อยกเลิก" />
+      <StackPanel>
+        <TextBlock x:Name="Hint"
+                   Foreground="White"
+                   FontFamily="Leelawadee UI, Segoe UI"
+                   FontSize="15"
+                   HorizontalAlignment="Center"
+                   Text="ลากเมาส์เพื่อเพิ่มพื้นที่ใหม่ — คลิกกรอบเดิมเพื่อเลือก, Delete เพื่อลบ" />
+        <TextBlock x:Name="Summary"
+                   Foreground="#FF9AA3B2"
+                   FontFamily="Leelawadee UI, Segoe UI"
+                   FontSize="12.5"
+                   HorizontalAlignment="Center"
+                   Margin="0,4,0,0"
+                   Text="Enter = บันทึก · Esc = ยกเลิกทั้งหมด" />
+      </StackPanel>
     </Border>
   </Grid>
 </Window>

@@ -21,6 +21,7 @@ namespace TLOverlay.App.Views;
 public partial class OverlayWindow : Window
 {
     private readonly Dictionary<string, Border> _panels = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Border> _outlines = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _topmostTimer;
 
     private IntPtr _handle;
@@ -51,6 +52,16 @@ public partial class OverlayWindow : Window
     /// </summary>
     public bool IsHiddenFromCapture { get; private set; }
 
+    /// <summary>
+    /// The translated text, and the capture outlines, are toggled separately.
+    /// They answer different questions - "is the translation in my way" versus
+    /// "is my box in the right place" - and a player tuning a region usually
+    /// wants the outlines on and the text off.
+    /// </summary>
+    public bool TranslationsVisible { get; private set; } = true;
+
+    public bool RegionOutlinesVisible { get; private set; }
+
     private void OnSourceInitialized(object? sender, EventArgs e)
     {
         _handle = new WindowInteropHelper(this).Handle;
@@ -66,9 +77,101 @@ public partial class OverlayWindow : Window
     {
         _gameWindow = gameWindow;
         _profile = profile;
+
         Surface.Children.Clear();
         _panels.Clear();
+        _outlines.Clear();
+
         AlignToGame();
+        ShowRegions(profile.Regions);
+    }
+
+    /// <summary>
+    /// Draws a dashed outline per capture region, so the player can see where
+    /// the pipeline is actually reading from without opening the editor.
+    /// </summary>
+    public void ShowRegions(IEnumerable<CaptureRegion> regions)
+    {
+        foreach (var outline in _outlines.Values)
+        {
+            Surface.Children.Remove(outline);
+        }
+
+        _outlines.Clear();
+
+        foreach (var region in regions.Where(static r => r.IsValid))
+        {
+            var outline = CreateOutline(region.Name);
+            _outlines[region.Name] = outline;
+            Surface.Children.Add(outline);
+        }
+
+        LayoutOutlines();
+    }
+
+    private void LayoutOutlines()
+    {
+        // Region coordinates are fractions, and the window already matches the
+        // game's client area, so no DPI conversion is needed here - both sides
+        // are in device-independent units.
+        foreach (var region in _profile.Regions)
+        {
+            if (!_outlines.TryGetValue(region.Name, out Border? outline))
+            {
+                continue;
+            }
+
+            Canvas.SetLeft(outline, region.X * ActualWidth);
+            Canvas.SetTop(outline, region.Y * ActualHeight);
+            outline.Width = Math.Max(2, region.Width * ActualWidth);
+            outline.Height = Math.Max(2, region.Height * ActualHeight);
+            outline.Visibility = RegionOutlinesVisible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private static Border CreateOutline(string name) =>
+        new()
+        {
+            BorderBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0x4C, 0x8D, 0xFF)),
+            BorderThickness = new Thickness(2),
+            CornerRadius = new CornerRadius(3),
+            Background = new SolidColorBrush(Color.FromArgb(0x18, 0x4C, 0x8D, 0xFF)),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+            Child = new TextBlock
+            {
+                Text = name,
+                Margin = new Thickness(4, 2, 4, 2),
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                FontSize = 11,
+                Foreground = new SolidColorBrush(Color.FromArgb(0xEE, 0xCF, 0xE0, 0xFF)),
+            },
+        };
+
+    public void SetTranslationsVisible(bool visible)
+    {
+        TranslationsVisible = visible;
+
+        foreach (var panel in _panels.Values)
+        {
+            // Only re-show panels that hold something; an empty one would flash
+            // an empty box over the game.
+            if (!visible)
+            {
+                panel.Visibility = Visibility.Collapsed;
+            }
+            else if (((TextBlock)panel.Child).Text.Length > 0)
+            {
+                panel.Visibility = Visibility.Visible;
+            }
+        }
+    }
+
+    public void SetRegionOutlinesVisible(bool visible)
+    {
+        RegionOutlinesVisible = visible;
+        LayoutOutlines();
     }
 
     /// <summary>
@@ -85,6 +188,7 @@ public partial class OverlayWindow : Window
         }
 
         OverlayWindowStyles.SetBounds(_handle, x, y, width, height);
+        LayoutOutlines();
     }
 
     /// <summary>
@@ -117,7 +221,7 @@ public partial class OverlayWindow : Window
             0x14, 0x16, 0x1B));
 
         Position(panel, translation, scale);
-        panel.Visibility = Visibility.Visible;
+        panel.Visibility = TranslationsVisible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void ClearRegion(string regionName)

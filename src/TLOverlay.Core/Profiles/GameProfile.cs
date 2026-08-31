@@ -23,6 +23,34 @@ public sealed record CaptureRegion(string Name, double X, double Y, double Width
 {
     public static CaptureRegion BottomDialogue { get; } = new("Dialogue", 0.15, 0.72, 0.70, 0.22);
 
+    /// <summary>
+    /// Picks a name not already taken. Regions are addressed by name across the
+    /// pipeline and the overlay, so two sharing one would have their detectors
+    /// and their on-screen panels collide.
+    /// </summary>
+    public static string UniqueName(IEnumerable<string> existing, string baseName = "Dialogue")
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+
+        var taken = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+
+        if (!taken.Contains(baseName))
+        {
+            return baseName;
+        }
+
+        for (int suffix = 2; suffix < 1000; suffix++)
+        {
+            string candidate = $"{baseName} {suffix}";
+            if (!taken.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return $"{baseName} {Guid.NewGuid():N}";
+    }
+
     public bool IsValid =>
         Width > 0 && Height > 0
         && X >= 0 && Y >= 0

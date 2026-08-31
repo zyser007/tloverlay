@@ -30,6 +30,8 @@ public sealed class TranslationSession : IAsyncDisposable
     private SqliteTranslationCache? _cache;
     private WindowsMediaOcrEngine? _ocr;
     private GameWindow? _target;
+    private bool _translationsVisible = true;
+    private bool _regionOutlinesVisible;
     private bool _disposed;
 
     public TranslationSession(TranslatorSettings settings, Dispatcher? dispatcher = null)
@@ -86,6 +88,8 @@ public sealed class TranslationSession : IAsyncDisposable
         _overlay = new OverlayWindow();
         _overlay.Show();
         _overlay.Attach(target.Handle, profile);
+        _overlay.SetTranslationsVisible(_translationsVisible);
+        _overlay.SetRegionOutlinesVisible(_regionOutlinesVisible);
 
         if (!_overlay.IsHiddenFromCapture)
         {
@@ -115,16 +119,25 @@ public sealed class TranslationSession : IAsyncDisposable
         Log.Information("Session started for {Title} ({Process}).", target.Title, target.ProcessName);
     }
 
-    public void ToggleOverlayVisible()
-    {
-        if (_overlay is null)
-        {
-            return;
-        }
+    public bool TranslationsVisible => _translationsVisible;
 
-        _overlay.Visibility = _overlay.Visibility == Visibility.Visible
-            ? Visibility.Hidden
-            : Visibility.Visible;
+    public bool RegionOutlinesVisible => _regionOutlinesVisible;
+
+    /// <summary>
+    /// The two layers toggle independently. Held on the session rather than only
+    /// on the window so the choice survives a restart, which happens whenever a
+    /// region is edited.
+    /// </summary>
+    public void SetTranslationsVisible(bool visible)
+    {
+        _translationsVisible = visible;
+        _overlay?.SetTranslationsVisible(visible);
+    }
+
+    public void SetRegionOutlinesVisible(bool visible)
+    {
+        _regionOutlinesVisible = visible;
+        _overlay?.SetRegionOutlinesVisible(visible);
     }
 
     public void SetClickThrough(bool clickThrough) => _overlay?.SetClickThrough(clickThrough);

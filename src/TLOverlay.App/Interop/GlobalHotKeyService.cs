@@ -9,7 +9,8 @@ public enum HotKeyAction
     ToggleTranslation,
     TranslateOnce,
     EditRegions,
-    ToggleOverlayVisible,
+    ToggleTranslations,
+    ToggleRegionOutlines,
     ToggleClickThrough,
 }
 
@@ -58,7 +59,8 @@ public sealed class GlobalHotKeyService : IDisposable
             (HotKeyAction.ToggleTranslation, NativeMethods.ModControl | NativeMethods.ModAlt, Key.T),
             (HotKeyAction.TranslateOnce, NativeMethods.ModControl | NativeMethods.ModAlt, Key.S),
             (HotKeyAction.EditRegions, NativeMethods.ModControl | NativeMethods.ModAlt, Key.R),
-            (HotKeyAction.ToggleOverlayVisible, NativeMethods.ModControl | NativeMethods.ModAlt, Key.H),
+            (HotKeyAction.ToggleTranslations, NativeMethods.ModControl | NativeMethods.ModAlt, Key.H),
+            (HotKeyAction.ToggleRegionOutlines, NativeMethods.ModControl | NativeMethods.ModAlt, Key.G),
             (HotKeyAction.ToggleClickThrough, NativeMethods.ModControl | NativeMethods.ModAlt, Key.C),
         ];
 

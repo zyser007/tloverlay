@@ -60,15 +60,18 @@ Three design decisions carry most of the weight:
    already have. This happens once.
 3. Pick the game window from the list. The panel warns you if the window still
    has a border, which usually means the game is in exclusive fullscreen.
-4. `Ctrl+Alt+R`, drag a box over the dialogue area, press Enter. The region is
-   saved per game and reloads automatically next time.
+4. `Ctrl+Alt+R`, drag a box over the dialogue area, press Enter. The editor opens
+   showing the regions you already have; dragging adds another, clicking one
+   selects it and Delete removes it. Regions are saved per game and reload
+   automatically next time.
 5. `Ctrl+Alt+T` to start translating.
 
 | Hotkey | Action |
 |---|---|
 | `Ctrl+Alt+T` | Start / stop translating |
 | `Ctrl+Alt+R` | Draw the capture region |
-| `Ctrl+Alt+H` | Hide / show the overlay |
+| `Ctrl+Alt+H` | Show / hide the translated text |
+| `Ctrl+Alt+G` | Show / hide the capture region outlines |
 | `Ctrl+Alt+C` | Toggle click-through |
 
 ## Models

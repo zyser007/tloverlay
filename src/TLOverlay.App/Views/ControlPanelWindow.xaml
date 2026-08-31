@@ -13,6 +13,7 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <StackPanel Grid.Row="0" Margin="0,0,0,12">
@@ -66,9 +67,22 @@
                Foreground="{StaticResource PanelMuted}"
                FontSize="12"
                TextWrapping="Wrap"
-               Text="คีย์ลัด: Ctrl+Alt+T เปิด/ปิดการแปล · Ctrl+Alt+R เลือกพื้นที่ · Ctrl+Alt+H ซ่อน overlay · Ctrl+Alt+C สลับคลิกทะลุ" />
+               Text="คีย์ลัด: Ctrl+Alt+T เปิด/ปิดการแปล · Ctrl+Alt+R เลือกพื้นที่ · Ctrl+Alt+H ซ่อนข้อความแปล · Ctrl+Alt+G ซ่อนกรอบพื้นที่ · Ctrl+Alt+C สลับคลิกทะลุ" />
 
-    <StackPanel Grid.Row="4"
+    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,14,0,0">
+      <TextBlock Text="แสดงบนจอ:" VerticalAlignment="Center"
+                 Foreground="{StaticResource PanelMuted}" FontSize="12.5" Margin="0,0,10,0" />
+      <ToggleButton x:Name="ShowTranslationsToggle" Content="ข้อความแปล" IsChecked="True"
+                    Padding="12,6" MinWidth="0" Margin="0,0,8,0"
+                    FontFamily="{StaticResource ThaiUiFont}"
+                    Checked="OnLayerToggled" Unchecked="OnLayerToggled" />
+      <ToggleButton x:Name="ShowRegionsToggle" Content="กรอบพื้นที่"
+                    Padding="12,6" MinWidth="0"
+                    FontFamily="{StaticResource ThaiUiFont}"
+                    Checked="OnLayerToggled" Unchecked="OnLayerToggled" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="5"
                 Orientation="Horizontal"
                 HorizontalAlignment="Right"
                 Margin="0,14,0,0">
