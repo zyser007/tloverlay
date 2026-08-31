@@ -6,8 +6,18 @@
     <RootNamespace>TLOverlay.App</RootNamespace>
     <AssemblyName>TLOverlay</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon />
+    <ApplicationIcon>Assets\tloverlay.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Embedded as a resource as well as set as the application icon. WPF does
+      fall back to the executable's icon for a window with none of its own, but
+      the two windows that show a title bar set it explicitly rather than relying
+      on that.
+    -->
+    <Resource Include="Assets\tloverlay.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Serilog" Version="4.*" />
