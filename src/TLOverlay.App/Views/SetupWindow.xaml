@@ -103,6 +103,10 @@
     <StackPanel Grid.Row="3" Margin="0,0,0,14">
       <TextBlock Text="โมเดล" Foreground="{StaticResource PanelMuted}" FontSize="12" Margin="0,0,0,5" />
       <ComboBox x:Name="ModelCombo" SelectionChanged="OnModelSelectionChanged" Padding="8,6" />
+      <TextBox x:Name="CustomUrl" Visibility="Collapsed" Margin="0,8,0,0" Padding="8,6"
+               FontFamily="{StaticResource MonoFont}" FontSize="11.5"
+               TextChanged="OnCustomUrlChanged"
+               ToolTip="วาง URL ของไฟล์ .gguf โดยตรง" />
       <TextBlock x:Name="LicenseText" Foreground="{StaticResource PanelMuted}" FontSize="11.5"
                  TextWrapping="Wrap" Margin="0,6,0,0" />
     </StackPanel>

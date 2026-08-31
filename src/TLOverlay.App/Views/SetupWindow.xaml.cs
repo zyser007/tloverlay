@@ -39,8 +39,16 @@ public partial class SetupWindow : Window
             ModelCombo.Items.Add(entry.Summary);
         }
 
-        var current = ModelCatalog.FindById(_settings.Translator.ModelId) ?? ModelCatalog.Default;
-        ModelCombo.SelectedIndex = ModelCatalog.Entries.ToList().IndexOf(current);
+        // Always last, and always present: a catalog entry that has moved or been
+        // withdrawn upstream must not leave the user stuck.
+        ModelCombo.Items.Add("ระบุ URL เอง…");
+
+        var current = ModelCatalog.FindById(_settings.Translator.ModelId);
+        ModelCombo.SelectedIndex = current is null
+            ? (string.Equals(_settings.Translator.ModelId, ModelCatalog.CustomId, StringComparison.Ordinal)
+                ? ModelCatalog.Entries.Count
+                : 0)
+            : ModelCatalog.Entries.ToList().IndexOf(current);
 
         GpuOption.IsChecked = _settings.Translator.GpuLayers > 0;
         CpuOption.IsChecked = !GpuOption.IsChecked;
@@ -58,10 +66,18 @@ public partial class SetupWindow : Window
             AppPaths.DataDirectory);
     }
 
-    private ModelEntry SelectedModel =>
-        ModelCombo.SelectedIndex >= 0 && ModelCombo.SelectedIndex < ModelCatalog.Entries.Count
-            ? ModelCatalog.Entries[ModelCombo.SelectedIndex]
-            : ModelCatalog.Default;
+    private bool IsCustomSelected => ModelCombo.SelectedIndex == ModelCatalog.Entries.Count;
+
+    /// <summary>
+    /// Null when the custom option is chosen and the URL is not usable yet, which
+    /// is what keeps the download button from firing at nothing.
+    /// </summary>
+    private ModelEntry? SelectedModel =>
+        IsCustomSelected
+            ? ModelCatalog.TryCreateCustom(CustomUrl.Text)
+            : ModelCombo.SelectedIndex >= 0 && ModelCombo.SelectedIndex < ModelCatalog.Entries.Count
+                ? ModelCatalog.Entries[ModelCombo.SelectedIndex]
+                : ModelCatalog.Default;
 
     private LlamaBackend Backend => GpuOption.IsChecked == true ? LlamaBackend.Cuda : LlamaBackend.Cpu;
 
@@ -88,13 +104,13 @@ public partial class SetupWindow : Window
 
         DoneButton.IsEnabled = hasServer && hasModel && !_busy;
         ServerDownloadButton.IsEnabled = !_busy;
-        ModelDownloadButton.IsEnabled = !_busy;
+        ModelDownloadButton.IsEnabled = !_busy && SelectedModel is not null;
 
         LogHint.Text = $"ถ้าดาวน์โหลดไม่สำเร็จ ดูรายละเอียดได้ที่ {AppPaths.LogsDirectory}";
 
         OfflineUrls.Text = string.Join(
             Environment.NewLine + Environment.NewLine,
-            SelectedModel.Url.ToString() + Environment.NewLine + "  →  " + ModelTarget,
+            (SelectedModel?.Url.ToString() ?? "(ยังไม่ได้ระบุ URL)") + Environment.NewLine + "  →  " + ModelTarget,
             "https://github.com/ggml-org/llama.cpp/releases/latest" + Environment.NewLine + "  →  " + ServerTarget);
     }
 
@@ -104,14 +120,26 @@ public partial class SetupWindow : Window
 
     private void OnModelSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        CustomUrl.Visibility = IsCustomSelected ? Visibility.Visible : Visibility.Collapsed;
+
         var entry = SelectedModel;
 
         // Licence belongs where the choice is made. Finding out a model is
         // non-commercial after two gigabytes have downloaded is too late.
-        LicenseText.Text = entry.CommercialUseAllowed
-            ? $"สัญญาอนุญาต: {entry.License}"
-            : $"สัญญาอนุญาต: {entry.License} — ใช้เชิงพาณิชย์ไม่ได้";
+        LicenseText.Text = entry is null
+            ? "วาง URL ของไฟล์ .gguf แล้วกดดาวน์โหลด"
+            : entry.CommercialUseAllowed
+                ? $"สัญญาอนุญาต: {entry.License}"
+                : $"สัญญาอนุญาต: {entry.License} — ใช้เชิงพาณิชย์ไม่ได้";
 
+        if (IsLoaded)
+        {
+            RefreshState();
+        }
+    }
+
+    private void OnCustomUrlChanged(object sender, TextChangedEventArgs e)
+    {
         if (IsLoaded)
         {
             RefreshState();
@@ -145,6 +173,12 @@ public partial class SetupWindow : Window
     private async void OnDownloadModelClick(object sender, RoutedEventArgs e)
     {
         var entry = SelectedModel;
+
+        if (entry is null)
+        {
+            Status("วาง URL ของไฟล์ .gguf ให้ครบก่อน (ต้องขึ้นต้นด้วย https://)");
+            return;
+        }
 
         await RunAsync($"model download ({entry.Id})", async (progress, token) =>
         {

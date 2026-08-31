@@ -14,7 +14,7 @@ public sealed class TranslatorSettings
 
     public string? ModelPath { get; set; }
 
-    public string ModelId { get; set; } = "typhoon2-3b-q4";
+    public string ModelId { get; set; } = "gemma3-4b-q4km";
 
     /// <summary>
     /// Zero keeps the model on the CPU. That is the right default while a game

@@ -65,3 +65,15 @@ jobs:
         with:
           name: TLOverlay-win-x64
           path: artifacts/TLOverlay-win-x64
+
+  # Separate job: a withdrawn model upstream is worth knowing about, but it must
+  # not stop the build and test signal from reporting.
+  catalog:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the model URLs still resolve
+        shell: pwsh
+        run: pwsh tools/check-model-urls.ps1
