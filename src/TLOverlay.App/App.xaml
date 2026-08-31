@@ -10,11 +10,29 @@
       Thai face with no bundled font.
     -->
     <FontFamily x:Key="ThaiUiFont">Leelawadee UI, Segoe UI, Tahoma</FontFamily>
+    <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, Courier New</FontFamily>
 
-    <SolidColorBrush x:Key="PanelBackground" Color="#FF1B1D23" />
-    <SolidColorBrush x:Key="PanelForeground" Color="#FFE9ECF2" />
-    <SolidColorBrush x:Key="PanelMuted" Color="#FF9AA3B2" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#FF4C8DFF" />
+    <!--
+      A light palette, close to ordinary Windows chrome. The earlier dark one
+      fought the framework: WPF's stock ComboBox, TextBox and ListBox draw
+      themselves light, so a near-white foreground rendered white-on-white and
+      the model dropdown looked empty. Styling with the grain costs nothing here
+      and removes that whole class of bug.
+
+      Note this applies to the app's own windows only. The overlay and the region
+      editor stay dark on purpose - they are drawn over a game, not over Windows.
+    -->
+    <SolidColorBrush x:Key="PanelBackground" Color="#FFF3F4F6" />
+    <SolidColorBrush x:Key="PanelForeground" Color="#FF16191D" />
+    <SolidColorBrush x:Key="PanelMuted" Color="#FF5B6470" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF1668C7" />
+
+    <SolidColorBrush x:Key="SurfaceBackground" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="SurfaceBorder" Color="#FFDCE0E5" />
+    <SolidColorBrush x:Key="TrackBackground" Color="#FFE4E7EB" />
+    <SolidColorBrush x:Key="CodeBackground" Color="#FFF6F7F9" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#FF107C41" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#FFA1540A" />
 
     <Style TargetType="TextBlock">
       <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
@@ -25,6 +43,22 @@
       <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
       <Setter Property="Padding" Value="14,7" />
       <Setter Property="MinWidth" Value="110" />
+    </Style>
+
+    <Style TargetType="ComboBox">
+      <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
+      <Setter Property="Foreground" Value="{StaticResource PanelForeground}" />
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+
+    <Style TargetType="RadioButton">
+      <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
+      <Setter Property="Foreground" Value="{StaticResource PanelForeground}" />
+    </Style>
+
+    <Style TargetType="Expander">
+      <Setter Property="FontFamily" Value="{StaticResource ThaiUiFont}" />
+      <Setter Property="Foreground" Value="{StaticResource PanelForeground}" />
     </Style>
 
   </Application.Resources>

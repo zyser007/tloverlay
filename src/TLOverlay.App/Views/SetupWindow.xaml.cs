@@ -48,6 +48,14 @@ public partial class SetupWindow : Window
         Closed += (_, _) => _http.Dispose();
 
         RefreshState();
+
+        // Written every time the window opens: a support question about setup is
+        // almost always "which paths is it actually using".
+        Log.Information(
+            "Setup opened. Server target {Server}; model target {Model}; data directory {Data}.",
+            ServerTarget,
+            ModelTarget,
+            AppPaths.DataDirectory);
     }
 
     private ModelEntry SelectedModel =>
@@ -71,16 +79,18 @@ public partial class SetupWindow : Window
         bool hasModel = File.Exists(ModelTarget);
 
         ServerGlyph.Text = hasServer ? "✓" : "✗";
-        ServerGlyph.Foreground = hasServer ? Brush("#FF43B98A") : Brush("#FFE8B14C");
+        ServerGlyph.Foreground = Swatch(hasServer);
         ServerPath.Text = hasServer ? ServerTarget : $"ยังไม่มีไฟล์ — จะบันทึกไว้ที่ {ServerTarget}";
 
         ModelGlyph.Text = hasModel ? "✓" : "✗";
-        ModelGlyph.Foreground = hasModel ? Brush("#FF43B98A") : Brush("#FFE8B14C");
+        ModelGlyph.Foreground = Swatch(hasModel);
         ModelPath.Text = hasModel ? ModelTarget : $"ยังไม่มีไฟล์ — จะบันทึกไว้ที่ {ModelTarget}";
 
         DoneButton.IsEnabled = hasServer && hasModel && !_busy;
         ServerDownloadButton.IsEnabled = !_busy;
         ModelDownloadButton.IsEnabled = !_busy;
+
+        LogHint.Text = $"ถ้าดาวน์โหลดไม่สำเร็จ ดูรายละเอียดได้ที่ {AppPaths.LogsDirectory}";
 
         OfflineUrls.Text = string.Join(
             Environment.NewLine + Environment.NewLine,
@@ -88,8 +98,9 @@ public partial class SetupWindow : Window
             "https://github.com/ggml-org/llama.cpp/releases/latest" + Environment.NewLine + "  →  " + ServerTarget);
     }
 
-    private static System.Windows.Media.Brush Brush(string hex) =>
-        (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString(hex)!;
+    /// <summary>Green for present, amber for missing, both readable on the light surface.</summary>
+    private System.Windows.Media.Brush Swatch(bool satisfied) =>
+        (System.Windows.Media.Brush)FindResource(satisfied ? "SuccessBrush" : "WarningBrush");
 
     private void OnModelSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -109,7 +120,7 @@ public partial class SetupWindow : Window
 
     private async void OnDownloadServerClick(object sender, RoutedEventArgs e)
     {
-        await RunAsync(async (progress, token) =>
+        await RunAsync("llama-server download", async (progress, token) =>
         {
             Status("กำลังหาไฟล์ล่าสุดของ llama.cpp…");
 
@@ -135,7 +146,7 @@ public partial class SetupWindow : Window
     {
         var entry = SelectedModel;
 
-        await RunAsync(async (progress, token) =>
+        await RunAsync($"model download ({entry.Id})", async (progress, token) =>
         {
             Status($"กำลังดาวน์โหลด {entry.DisplayName}");
 
@@ -150,16 +161,27 @@ public partial class SetupWindow : Window
     /// <summary>
     /// Runs one download, wiring up progress, cancellation and error reporting.
     /// Shared so the two rows cannot drift apart in how they behave.
+    ///
+    /// Every exit path has to say something. This is the first screen a user ever
+    /// sees, and a button that appears to do nothing is the worst outcome it can
+    /// produce - worse than an ugly error, because there is nothing to report.
     /// </summary>
-    private async Task RunAsync(Func<IProgress<DownloadProgress>, CancellationToken, Task> work)
+    private async Task RunAsync(string what, Func<IProgress<DownloadProgress>, CancellationToken, Task> work)
     {
         if (_busy)
         {
+            Status("กำลังดาวน์โหลดอยู่แล้ว — รอให้เสร็จ หรือกดยกเลิกก่อน");
             return;
         }
 
+        // Logged before anything can throw, so the log file always answers the
+        // first question: did the click even arrive?
+        Log.Information("Setup: starting {What}.", what);
+
         _busy = true;
-        _download = new CancellationTokenSource();
+
+        var cancellation = new CancellationTokenSource();
+        _download = cancellation;
 
         ProgressPanel.Visibility = Visibility.Visible;
         CancelButton.Visibility = Visibility.Visible;
@@ -172,28 +194,54 @@ public partial class SetupWindow : Window
 
         try
         {
-            await work(progress, _download.Token);
+            await work(progress, cancellation.Token);
             SaveSettings();
+            Log.Information("Setup: {What} completed.", what);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
             Status("ยกเลิกแล้ว — ไฟล์ที่โหลดไปบางส่วนยังอยู่ กดดาวน์โหลดอีกครั้งเพื่อโหลดต่อ");
         }
         catch (ModelDownloadException ex)
         {
             Status(ex.Message);
-            Log.Warning(ex, "Setup download failed.");
+            Log.Warning(ex, "Setup: {What} failed.", what);
+        }
+        catch (HttpRequestException ex)
+        {
+            // No network, DNS failure, a proxy in the way, a TLS problem. This
+            // used to escape uncaught and surface as a bare message box, which
+            // read to the user as the button doing nothing.
+            Status($"เชื่อมต่ออินเทอร์เน็ตไม่ได้: {ex.Message}");
+            Log.Error(ex, "Setup: {What} could not reach the network.", what);
+        }
+        catch (TaskCanceledException ex)
+        {
+            // A cancellation nobody asked for is a timeout, and saying "cancelled"
+            // would send the user looking for a button they never pressed.
+            Status("หมดเวลารอเซิร์ฟเวอร์ — ลองใหม่อีกครั้ง");
+            Log.Error(ex, "Setup: {What} timed out.", what);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Status($"ไม่มีสิทธิ์เขียนไฟล์: {ex.Message}");
+            Log.Error(ex, "Setup: {What} was denied write access.", what);
         }
         catch (IOException ex)
         {
             Status($"เขียนไฟล์ไม่สำเร็จ: {ex.Message}");
-            Log.Error(ex, "Setup could not write to disk.");
+            Log.Error(ex, "Setup: {What} could not write to disk.", what);
+        }
+        catch (Exception ex)
+        {
+            Status($"ผิดพลาด ({ex.GetType().Name}): {ex.Message}");
+            Log.Error(ex, "Setup: {What} failed unexpectedly.", what);
         }
         finally
         {
             _busy = false;
-            _download?.Dispose();
             _download = null;
+            cancellation.Dispose();
 
             CancelButton.Visibility = Visibility.Collapsed;
             RefreshState();

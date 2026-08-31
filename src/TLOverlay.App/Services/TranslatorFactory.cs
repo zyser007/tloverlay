@@ -14,7 +14,7 @@ public sealed class TranslatorSettings
 
     public string? ModelPath { get; set; }
 
-    public string ModelId { get; set; } = "typhoon2-4b-q4";
+    public string ModelId { get; set; } = "typhoon2-3b-q4";
 
     /// <summary>
     /// Zero keeps the model on the CPU. That is the right default while a game
@@ -60,9 +60,13 @@ public static class TranslatorFactory
     }
 
     /// <summary>
-    /// Looks beside the executable first, then walks up to the repository root so
-    /// a developer running from bin/Debug finds the same runtime/ and models/
-    /// directories that fetch-models.ps1 populates.
+    /// Where a given piece of the runtime lives.
+    ///
+    /// An existing file beside the executable wins, so a developer running from
+    /// bin/Debug and a portable install both keep working. When nothing is found,
+    /// the answer is the per-user data directory - never beside the executable,
+    /// because that is where downloads would be lost (launched from an archive)
+    /// or refused (installed under Program Files).
     /// </summary>
     public static string ResolveDefault(string relativePath)
     {
@@ -79,7 +83,7 @@ public static class TranslatorFactory
             directory = directory.Parent;
         }
 
-        return Path.Combine(AppContext.BaseDirectory, relativePath);
+        return Path.Combine(AppPaths.DataDirectory, relativePath);
     }
 
     public static bool IsModelInstalled(TranslatorSettings settings) =>

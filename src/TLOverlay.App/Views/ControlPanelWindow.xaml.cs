@@ -12,7 +12,7 @@ namespace TLOverlay.App.Views;
 
 public partial class ControlPanelWindow : Window
 {
-    private readonly ProfileStore _profiles = new();
+    private readonly ProfileStore _profiles = new(AppPaths.ProfilesDirectory);
     private readonly AppSettings _settings = SettingsStore.Load(App.DataDirectory);
     private readonly GlobalHotKeyService _hotKeys = new();
     private readonly DispatcherTimer _metricsTimer;

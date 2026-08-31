@@ -9,18 +9,16 @@ namespace TLOverlay.App;
 
 public partial class App : Application
 {
-    public static string DataDirectory { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "TLOverlay");
+    public static string DataDirectory => AppPaths.DataDirectory;
 
     protected override void OnStartup(StartupEventArgs e)
     {
-        Directory.CreateDirectory(DataDirectory);
+        AppPaths.EnsureCreated();
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .WriteTo.File(
-                Path.Combine(DataDirectory, "logs", "tloverlay-.log"),
+                Path.Combine(AppPaths.LogsDirectory, "tloverlay-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 7)
             .CreateLogger();
@@ -38,6 +36,19 @@ public partial class App : Application
         // The setup window is shown modally before anything else exists, so the
         // app must not treat closing it as "the last window closed".
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        if (AppPaths.IsRunningFromArchive)
+        {
+            // Everything written here vanishes when the archiver cleans up, so
+            // say so before the player spends an hour downloading a model into it.
+            MessageBox.Show(
+                "ดูเหมือนคุณกำลังเปิดโปรแกรมจากในไฟล์ ZIP/RAR โดยตรง\n\n" +
+                "กรุณาแตกไฟล์ออกมาไว้ในโฟลเดอร์จริงก่อน แล้วค่อยเปิด TLOverlay.exe อีกครั้ง\n" +
+                "ไม่อย่างนั้นไฟล์ที่โปรแกรมสร้างจะถูกลบทิ้งเมื่อปิดโปรแกรม",
+                "TLOverlay",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
 
         var settings = SettingsStore.Load(DataDirectory);
 

@@ -10,15 +10,15 @@
 
   <Window.Resources>
     <Style x:Key="Card" TargetType="Border">
-      <Setter Property="Background" Value="#FF23262E" />
-      <Setter Property="BorderBrush" Value="#FF343842" />
+      <Setter Property="Background" Value="{StaticResource SurfaceBackground}" />
+      <Setter Property="BorderBrush" Value="{StaticResource SurfaceBorder}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Padding" Value="14,12" />
     </Style>
 
     <Style x:Key="PathText" TargetType="TextBlock">
-      <Setter Property="FontFamily" Value="Consolas, Cascadia Mono" />
+      <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Foreground" Value="{StaticResource PanelMuted}" />
       <Setter Property="TextWrapping" Value="Wrap" />
@@ -131,13 +131,13 @@
 
     <StackPanel Grid.Row="5" x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,0,0,14">
       <ProgressBar x:Name="DownloadBar" Height="6" Minimum="0" Maximum="1"
-                   Background="#FF14161B" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
+                   Background="{StaticResource TrackBackground}" Foreground="{StaticResource AccentBrush}" BorderThickness="0" />
       <Grid Margin="0,7,0,0">
         <TextBlock x:Name="ProgressLeft" HorizontalAlignment="Left"
-                   FontFamily="Consolas, Cascadia Mono" FontSize="11.5"
+                   FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                    Foreground="{StaticResource PanelMuted}" />
         <TextBlock x:Name="ProgressRight" HorizontalAlignment="Right"
-                   FontFamily="Consolas, Cascadia Mono" FontSize="11.5"
+                   FontFamily="{StaticResource MonoFont}" FontSize="11.5"
                    Foreground="{StaticResource PanelMuted}" />
       </Grid>
     </StackPanel>
@@ -147,9 +147,13 @@
       <StackPanel Margin="4,8,0,0">
         <TextBlock Foreground="{StaticResource PanelMuted}" FontSize="12" TextWrapping="Wrap"
                    Text="โหลดไฟล์จากเครื่องอื่นแล้วก๊อปมาใส่ USB ได้ แล้วกดปุ่ม “เลือกไฟล์เอง…” ด้านบน" />
+        <TextBlock x:Name="LogHint" Foreground="{StaticResource PanelMuted}" FontSize="11.5"
+                   TextWrapping="Wrap" Margin="0,8,0,0" />
         <TextBox x:Name="OfflineUrls" Margin="0,8,0,0" IsReadOnly="True" TextWrapping="Wrap"
-                 BorderThickness="0" Background="#FF14161B" Foreground="#FFC3CCDB"
-                 FontFamily="Consolas, Cascadia Mono" FontSize="11" Padding="8" />
+                 BorderThickness="1" BorderBrush="{StaticResource SurfaceBorder}"
+                 Background="{StaticResource CodeBackground}" Foreground="{StaticResource PanelForeground}"
+                 FontFamily="{StaticResource MonoFont}" FontSize="11" Padding="8"
+                 MaxHeight="120" VerticalScrollBarVisibility="Auto" />
       </StackPanel>
     </Expander>
 
