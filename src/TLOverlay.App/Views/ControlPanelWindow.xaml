@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="TLOverlay"
         Icon="/Assets/tloverlay.ico"
-        Height="800" Width="820"
-        MinHeight="420" MinWidth="560"
+        Height="815" Width="540"
+        MinHeight="400" MinWidth="460"
         Background="{StaticResource PanelBackground}"
         FontFamily="{StaticResource ThaiUiFont}">
 

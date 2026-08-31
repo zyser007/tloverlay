@@ -31,6 +31,8 @@ public partial class SetupWindow : Window
     {
         InitializeComponent();
 
+        WindowSizing.ClampToWorkArea(this);
+
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _downloader = new ModelDownloader(_http);
 

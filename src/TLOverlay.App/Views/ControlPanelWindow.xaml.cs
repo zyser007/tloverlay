@@ -41,6 +41,8 @@ public partial class ControlPanelWindow : Window
     {
         InitializeComponent();
 
+        WindowSizing.ClampToWorkArea(this);
+
         WindowList.ItemsSource = Windows;
 
         _hotKeys.Pressed += OnHotKey;
