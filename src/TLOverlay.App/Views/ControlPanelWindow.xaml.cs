@@ -31,12 +31,14 @@ public partial class ControlPanelWindow : Window
         [HotKeyAction.ToggleRegionOutlines] = "ซ่อน/แสดงพื้นที่การแปล",
         [HotKeyAction.ToggleClickThrough] = "สลับโหมดเมาส์",
         [HotKeyAction.TranslateOnce] = "แปลครั้งเดียว",
+        [HotKeyAction.TranslateScreen] = "แปลทั้งหน้าจอ",
     };
 
     private readonly ProfileStore _profiles = new(AppPaths.ProfilesDirectory);
     private readonly AppSettings _settings = SettingsStore.Load(App.DataDirectory);
     private readonly GlobalHotKeyService _hotKeys = new();
     private readonly DispatcherTimer _metricsTimer;
+    private readonly DispatcherTimer _opacitySaveTimer;
     private readonly UpdateService _updates;
 
     private TranslationSession? _session;
@@ -45,6 +47,7 @@ public partial class ControlPanelWindow : Window
     private UpdateManifest? _availableUpdate;
     private bool _busy;
     private bool _updating;
+    private bool _screenPassBusy;
 
     public ControlPanelWindow()
     {
@@ -68,6 +71,16 @@ public partial class ControlPanelWindow : Window
         };
         _metricsTimer.Tick += (_, _) => UpdateMetrics();
         _metricsTimer.Start();
+
+        _opacitySaveTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(400),
+        };
+        _opacitySaveTimer.Tick += (_, _) =>
+        {
+            _opacitySaveTimer.Stop();
+            _profiles.Save(_profile);
+        };
 
         _updates = new UpdateService(_settings);
 
@@ -183,6 +196,11 @@ public partial class ControlPanelWindow : Window
                 : selected.ProcessName);
 
         _profile.ProcessName ??= selected.ProcessName;
+
+        // The opacity is per game, so the slider follows the profile that was
+        // just loaded rather than keeping the last game's value.
+        ScreenOpacitySlider.Value = Math.Clamp(_profile.ScreenOverlayOpacity, ScreenOpacitySlider.Minimum, 1.0);
+        UpdateScreenOpacityLabel();
 
         // Exclusive fullscreen is the most common reason capture comes back
         // black, and it is not obvious to the player, so say it plainly.
@@ -304,7 +322,9 @@ public partial class ControlPanelWindow : Window
         session.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
         session.SetRegionVisible(ShowRegionToggle.IsChecked == true);
         session.SetClickThrough(ClickThrough);
-        session.SetAutomaticTranslation(AutoTranslateToggle.IsChecked == true);
+        session.SetMode(SelectedMode);
+        session.SetScreenOpacity(_profile.ScreenOverlayOpacity);
+        session.ScreenPassBusy += (_, busy) => Dispatcher.Invoke(() => SetScreenPassBusy(busy));
 
         return session;
     }
@@ -346,6 +366,13 @@ public partial class ControlPanelWindow : Window
             case HotKeyAction.TranslateOnce:
                 _ = TranslateOnceAsync();
                 break;
+
+            case HotKeyAction.TranslateScreen:
+                // Switches to full-screen mode and translates, so one key does
+                // the whole thing rather than needing the panel first.
+                FullScreenOption.IsChecked = true;
+                _ = TranslateOnceAsync();
+                break;
         }
     }
 
@@ -359,29 +386,99 @@ public partial class ControlPanelWindow : Window
         _session?.SetRegionVisible(ShowRegionToggle.IsChecked == true);
     }
 
-    private void OnAutoTranslateChanged(object sender, RoutedEventArgs e)
+    private TranslationMode SelectedMode =>
+        FullScreenOption.IsChecked == true ? TranslationMode.OnDemandFullScreen
+        : OnDemandRegionOption.IsChecked == true ? TranslationMode.OnDemandRegion
+        : TranslationMode.Automatic;
+
+    private void OnTranslateModeChanged(object sender, RoutedEventArgs e)
     {
         // Fires during InitializeComponent, before the hint exists.
-        if (TranslateModeHint is null)
+        if (TranslateModeHint is null || ScreenOpacityPanel is null)
         {
             return;
         }
 
-        _session?.SetAutomaticTranslation(AutoTranslateToggle.IsChecked == true);
+        _session?.SetMode(SelectedMode);
         UpdateTranslateModeHint();
     }
 
     private void UpdateTranslateModeHint()
     {
-        bool automatic = AutoTranslateToggle.IsChecked == true;
+        TranslationMode mode = SelectedMode;
         bool running = _session?.IsRunning == true;
 
-        TranslateModeHint.Text = automatic
-            ? "แปลอัตโนมัติ: แปลให้เองทุกครั้งที่ข้อความในพื้นที่เปลี่ยนและนิ่งแล้ว"
-            : "แปลเอง: จะแปลเมื่อกด “แปลครั้งเดียว” หรือ Ctrl+Alt+S เท่านั้น — เซสชันยังทำงานอยู่ โมเดลจึงตอบทันที";
+        TranslateModeHint.Text = mode switch
+        {
+            TranslationMode.Automatic =>
+                "แปลอัตโนมัติ: แปลให้เองทุกครั้งที่ข้อความในพื้นที่เปลี่ยนและนิ่งแล้ว",
+
+            TranslationMode.OnDemandFullScreen =>
+                "แปลทั้งหน้าจอ: อ่านข้อความทุกจุดบนจอเกม แล้ววางคำแปลทับของเดิม — กดเมื่อไหร่ก็ได้ "
+                + "คำแปลจะค้างไว้จนกดใหม่ (Ctrl+Alt+H ซ่อน/แสดง)" + ScreenCostNote(),
+
+            _ =>
+                "แปลเอง: จะแปลเฉพาะพื้นที่ที่เลือก เมื่อกดปุ่มหรือคีย์ลัดเท่านั้น — "
+                + "เซสชันยังทำงานอยู่ โมเดลจึงตอบทันที",
+        };
+
+        bool fullScreen = mode == TranslationMode.OnDemandFullScreen;
+
+        TranslateOnceText.Text = fullScreen ? "แปลทั้งหน้าจอ" : "แปลครั้งเดียว";
+        TranslateOnceButton.ToolTip = fullScreen
+            ? "อ่านและแปลข้อความทุกจุดบนจอเกมตอนนี้"
+            : "แปลสิ่งที่อยู่ในพื้นที่การแปลตอนนี้หนึ่งครั้ง";
+
+        ScreenOpacityPanel.Visibility = fullScreen ? Visibility.Visible : Visibility.Collapsed;
+        UpdateScreenOpacityLabel();
 
         // Only meaningful while a session is attached to a game.
-        TranslateOnceButton.IsEnabled = running;
+        TranslateOnceButton.IsEnabled = running && !_screenPassBusy;
+    }
+
+    /// <summary>
+    /// A full-screen pass translates the whole HUD every time. On a metered
+    /// engine that is worth saying before the player leans on the key, and on a
+    /// CPU-bound local model it is worth saying twice.
+    /// </summary>
+    private string ScreenCostNote() => _settings.Translator.Backend switch
+    {
+        TranslationBackend.OpenAi => " · คิดเงินตามจำนวนบรรทัดที่แปล",
+        TranslationBackend.Local when _settings.Translator.GpuLayers == 0 =>
+            " · โมเดลในเครื่องบน CPU จะช้ามากกับข้อความทั้งจอ",
+        _ => string.Empty,
+    };
+
+    private void SetScreenPassBusy(bool busy)
+    {
+        _screenPassBusy = busy;
+        TranslateOnceButton.IsEnabled = _session?.IsRunning == true && !busy;
+
+        if (busy)
+        {
+            StatusText.Text = "กำลังอ่านและแปลข้อความทั้งจอ…";
+        }
+    }
+
+    private void UpdateScreenOpacityLabel() =>
+        ScreenOpacityLabel.Text = $"ความทึบของกล่องคำแปล {_profile.ScreenOverlayOpacity:P0}";
+
+    private void OnScreenOpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (ScreenOpacityLabel is null)
+        {
+            return;
+        }
+
+        _profile.ScreenOverlayOpacity = e.NewValue;
+        _session?.SetScreenOpacity(e.NewValue);
+        UpdateScreenOpacityLabel();
+
+        // A slider raises this on every mouse-move tick, and every other setting
+        // here saves immediately - doing that would rewrite the profile dozens of
+        // times per drag.
+        _opacitySaveTimer.Stop();
+        _opacitySaveTimer.Start();
     }
 
     private async Task TranslateOnceAsync()
@@ -679,6 +776,8 @@ public partial class ControlPanelWindow : Window
     private async void OnClosed(object? sender, EventArgs e)
     {
         _metricsTimer.Stop();
+        _opacitySaveTimer.Stop();
+        _profiles.Save(_profile);
         _hotKeys.Pressed -= OnHotKey;
         _hotKeys.Dispose();
 

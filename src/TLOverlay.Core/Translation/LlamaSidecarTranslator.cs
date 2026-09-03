@@ -14,7 +14,7 @@ namespace TLOverlay.Core.Translation;
 /// more natural game dialogue than a general MT model of comparable size. It is
 /// still fully offline: the server is a bundled binary bound to 127.0.0.1.
 /// </summary>
-public sealed class LlamaSidecarTranslator : ITranslator
+public sealed class LlamaSidecarTranslator : ITranslator, IBatchTranslator
 {
     private readonly LlamaServerOptions _options;
     private readonly LlamaServerProcess _server;
@@ -59,7 +59,63 @@ public sealed class LlamaSidecarTranslator : ITranslator
         }
 
         var protectedText = _glossary.Protect(text);
-        var payload = BuildRequest(protectedText.Text);
+
+        string raw = await AskAsync(
+            ChatTranslationPrompt.BuildMessages(protectedText.Text),
+            maxTokens: 512,
+            cancellationToken).ConfigureAwait(false);
+
+        return GlossaryService.Restore(CleanModelOutput(raw), protectedText);
+    }
+
+    /// <summary>
+    /// Translates a screen's worth of lines in one request.
+    ///
+    /// Worth more here than with a hosted model, and for a different reason:
+    /// nothing is billed, but every request re-processes the prompt, and on a CPU
+    /// that is most of the wait. One request for forty lines is one prompt.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> TranslateBatchAsync(
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(lines);
+
+        if (!await IsReadyAsync(cancellationToken).ConfigureAwait(false))
+        {
+            throw new InvalidOperationException("Local translation server is not available.");
+        }
+
+        return await ChatBatch.RunAsync(
+            lines,
+            _glossary,
+            (chunk, token) => AskAsync(
+                ChatTranslationPrompt.BuildBatchMessages(chunk),
+                ChatTranslationPrompt.MaxTokensFor(chunk.Count),
+                token),
+            (line, token) => TranslateAsync(line, token),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>One request, one raw answer. Shared by the single and batch paths.</summary>
+    private async Task<string> AskAsync(
+        List<object> messages,
+        int maxTokens,
+        CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            model = _options.ModelId,
+            messages,
+
+            // Near-greedy: we want the same line to translate the same way every
+            // time it appears, otherwise the cache and the player both suffer.
+            temperature = 0.1,
+            top_p = 0.9,
+            max_tokens = maxTokens,
+            stream = false,
+        };
 
         using var response = await _client
             .PostAsJsonAsync(new Uri(_options.BaseAddress, "v1/chat/completions"), payload, cancellationToken)
@@ -70,24 +126,7 @@ public sealed class LlamaSidecarTranslator : ITranslator
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        string raw = ExtractContent(document);
-        string cleaned = CleanModelOutput(raw);
-        return GlossaryService.Restore(cleaned, protectedText);
-    }
-
-    private object BuildRequest(string sourceText)
-    {
-        return new
-        {
-            model = _options.ModelId,
-            messages = ChatTranslationPrompt.BuildMessages(sourceText),
-            // Near-greedy: we want the same line to translate the same way every
-            // time it appears, otherwise the cache and the player both suffer.
-            temperature = 0.1,
-            top_p = 0.9,
-            max_tokens = 512,
-            stream = false,
-        };
+        return ExtractContent(document);
     }
 
     private static string ExtractContent(JsonDocument document)

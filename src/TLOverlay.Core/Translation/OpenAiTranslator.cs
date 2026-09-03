@@ -36,7 +36,7 @@ public sealed class OpenAiOptions
 /// Same prompt and same output cleanup as the local model, so switching between
 /// them changes the speed and the bill, not the voice.
 /// </summary>
-public sealed class OpenAiTranslator : ITranslator
+public sealed class OpenAiTranslator : ITranslator, IBatchTranslator
 {
     private readonly OpenAiOptions _options;
     private readonly GlossaryService _glossary;
@@ -86,6 +86,47 @@ public sealed class OpenAiTranslator : ITranslator
 
         var protectedText = _glossary.Protect(text);
 
+        string raw = await AskAsync(
+            ChatTranslationPrompt.BuildMessages(protectedText.Text),
+            maxTokens: 512,
+            cancellationToken).ConfigureAwait(false);
+
+        return GlossaryService.Restore(ChatTranslationPrompt.CleanModelOutput(raw), protectedText);
+    }
+
+    /// <summary>
+    /// Translates a whole screen's worth of lines in one request - which for a
+    /// metered API is the difference between one charge and forty.
+    /// </summary>
+    public Task<IReadOnlyList<string>> TranslateBatchAsync(
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(lines);
+
+        return ChatBatch.RunAsync(
+            lines,
+            _glossary,
+            (chunk, token) => AskAsync(
+                ChatTranslationPrompt.BuildBatchMessages(chunk),
+                ChatTranslationPrompt.MaxTokensFor(chunk.Count),
+                token),
+            (line, token) => TranslateAsync(line, token),
+            cancellationToken);
+    }
+
+    /// <summary>One request, one raw answer. Shared by both paths.</summary>
+    private async Task<string> AskAsync(
+        List<object> messages,
+        int maxTokens,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        {
+            throw new CloudTranslationException("ยังไม่ได้ใส่ API key");
+        }
+
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
             new Uri(_options.BaseAddress, "chat/completions"))
@@ -93,13 +134,13 @@ public sealed class OpenAiTranslator : ITranslator
             Content = JsonContent.Create(new
             {
                 model = _options.Model,
-                messages = ChatTranslationPrompt.BuildMessages(protectedText.Text),
+                messages,
 
                 // Near-greedy, as with the local model: the same line should
                 // translate the same way every time it appears, or the cache and
                 // the player both suffer.
                 temperature = 0.1,
-                max_tokens = 512,
+                max_tokens = maxTokens,
                 stream = false,
             }),
         };
@@ -116,10 +157,8 @@ public sealed class OpenAiTranslator : ITranslator
             throw Failure(response.StatusCode, body);
         }
 
-        string raw = ExtractContent(
+        return ExtractContent(
             await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false));
-
-        return GlossaryService.Restore(ChatTranslationPrompt.CleanModelOutput(raw), protectedText);
     }
 
     internal static string ExtractContent(string body)

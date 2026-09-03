@@ -33,7 +33,7 @@ public sealed class CloudTranslationException : Exception
 /// change or withdraw it without notice. The app says so where the choice is
 /// made, rather than letting a player discover it mid-game.
 /// </summary>
-public sealed class GoogleTranslateTranslator : ITranslator
+public sealed class GoogleTranslateTranslator : ITranslator, IBatchTranslator
 {
     private const string FreeEndpoint = "https://translate.googleapis.com/translate_a/single";
     private const string CloudEndpoint = "https://translation.googleapis.com/language/translate/v2";
@@ -93,6 +93,90 @@ public sealed class GoogleTranslateTranslator : ITranslator
             : await TranslateCloudAsync(protectedText.Text, cancellationToken).ConfigureAwait(false);
 
         return GlossaryService.Restore(translated.Trim(), protectedText);
+    }
+
+    /// <summary>
+    /// Translates many lines in one request - but only with a key.
+    ///
+    /// Cloud Translation v2 takes a list of q values and answers in request
+    /// order, which is documented behaviour worth relying on. The free endpoint
+    /// also accepts repeated q, but its multi-value answer has a different and
+    /// undocumented shape from the one this class parses, so batching it would
+    /// mean guessing at a format Google never promised. Without a key this
+    /// returns line by line instead: slower and more requests, but correct.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> TranslateBatchAsync(
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(lines);
+
+        if (_apiKey is null || lines.Count == 0)
+        {
+            var sequential = new string[lines.Count];
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                sequential[i] = await TranslateAsync(lines[i], cancellationToken).ConfigureAwait(false);
+            }
+
+            return sequential;
+        }
+
+        var masked = new ProtectedText[lines.Count];
+        var payload = new string[lines.Count];
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            masked[i] = _glossary.Protect(lines[i]);
+            payload[i] = masked[i].Text;
+        }
+
+        IReadOnlyList<string> translated = await TranslateCloudBatchAsync(payload, cancellationToken)
+            .ConfigureAwait(false);
+
+        var results = new string[lines.Count];
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            results[i] = i < translated.Count
+                ? GlossaryService.Restore(translated[i].Trim(), masked[i])
+                : string.Empty;
+        }
+
+        return results;
+    }
+
+    private async Task<IReadOnlyList<string>> TranslateCloudBatchAsync(
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken)
+    {
+        var payload = new
+        {
+            q = lines,
+            source = SourceLanguage,
+            target = TargetLanguage,
+            format = "text",
+        };
+
+        string url = $"{CloudEndpoint}?key={Uri.EscapeDataString(_apiKey!)}";
+
+        using HttpResponseMessage response = await _client
+            .PostAsync(
+                url,
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw Failure(response.StatusCode, keyed: true);
+        }
+
+        string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+
+        return ParseCloudBatchResponse(body);
     }
 
     private async Task<string> TranslateFreeAsync(string text, CancellationToken cancellationToken)
@@ -226,6 +310,42 @@ public sealed class GoogleTranslateTranslator : ITranslator
             }
 
             return builder.ToString();
+        }
+        catch (JsonException ex)
+        {
+            throw new CloudTranslationException("Google ตอบกลับมาในรูปแบบที่อ่านไม่ได้", ex);
+        }
+    }
+
+    /// <summary>
+    /// Reads v2's answer as a list, one entry per q that was sent, in the order
+    /// they were sent. The single-line parser concatenates instead, which is
+    /// right there and wrong here.
+    /// </summary>
+    internal static IReadOnlyList<string> ParseCloudBatchResponse(string body)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(body);
+
+            if (!document.RootElement.TryGetProperty("data", out JsonElement data)
+                || !data.TryGetProperty("translations", out JsonElement translations)
+                || translations.ValueKind != JsonValueKind.Array)
+            {
+                return [];
+            }
+
+            var results = new List<string>(translations.GetArrayLength());
+
+            foreach (JsonElement translation in translations.EnumerateArray())
+            {
+                results.Add(translation.TryGetProperty("translatedText", out JsonElement value)
+                    && value.ValueKind == JsonValueKind.String
+                        ? WebUtility.HtmlDecode(value.GetString()) ?? string.Empty
+                        : string.Empty);
+            }
+
+            return results;
         }
         catch (JsonException ex)
         {

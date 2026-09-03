@@ -62,6 +62,7 @@ public enum HotKeyAction
     ToggleTranslations,
     ToggleRegionOutlines,
     ToggleClickThrough,
+    TranslateScreen,
 }
 
 /// <summary>
@@ -110,6 +111,7 @@ public sealed class GlobalHotKeyService : IDisposable
         new(HotKeyAction.ToggleRegionOutlines, NativeMethods.ModControl | NativeMethods.ModAlt, Key.G, "Ctrl+Alt+G"),
         new(HotKeyAction.ToggleClickThrough, NativeMethods.ModControl | NativeMethods.ModAlt, Key.C, "Ctrl+Alt+C"),
         new(HotKeyAction.TranslateOnce, NativeMethods.ModControl | NativeMethods.ModAlt, Key.S, "Ctrl+Alt+S"),
+        new(HotKeyAction.TranslateScreen, NativeMethods.ModControl | NativeMethods.ModAlt, Key.F, "Ctrl+Alt+F"),
     ];
 
     /// <summary>

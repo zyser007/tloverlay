@@ -51,6 +51,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
     private readonly SemaphoreSlim _grabGate = new(1, 1);
 
     private CancellationTokenSource? _loopCancellation;
+    private CancellationTokenSource? _screenPass;
     private Task? _loop;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
     private bool _disposed;
@@ -73,16 +74,39 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
     public event EventHandler<string>? Failed;
 
+    /// <summary>One full-screen pass finished, with every line it translated.</summary>
+    public event EventHandler<ScreenTranslation>? ScreenTranslationReady;
+
+    /// <summary>
+    /// True when a full-screen pass starts, false when it ends. The player is
+    /// looking at the game, not at the control panel, and a sweep that takes
+    /// eight seconds with nothing acknowledging it reads as a dead key.
+    /// </summary>
+    public event EventHandler<bool>? ScreenPassBusy;
+
     public PipelineMetrics Metrics { get; } = new();
 
     /// <summary>
-    /// Whether the pipeline translates on its own as the screen changes.
+    /// How much gets translated, and when.
     ///
-    /// Turning it off leaves the session running - capture stays attached and the
-    /// model stays loaded - so a single on-demand translation is instant rather
-    /// than paying for a cold start.
+    /// The poll loop's only way into region processing is behind an equality
+    /// check on this, which is what makes full-screen mode structurally unable to
+    /// run automatically rather than merely discouraged from it. Switching away
+    /// from Automatic leaves the session running - capture stays attached and the
+    /// model stays loaded - so an on-demand pass is instant rather than paying
+    /// for a cold start.
     /// </summary>
-    public bool AutomaticTranslation { get; set; } = true;
+    public TranslationMode Mode { get; set; } = TranslationMode.Automatic;
+
+    /// <summary>
+    /// The old two-state view of <see cref="Mode"/>, kept because the session and
+    /// its tests speak it.
+    /// </summary>
+    public bool AutomaticTranslation
+    {
+        get => Mode == TranslationMode.Automatic;
+        set => Mode = value ? TranslationMode.Automatic : TranslationMode.OnDemandRegion;
+    }
 
     public bool IsRunning => _loop is { IsCompleted: false };
 
@@ -143,6 +167,8 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
         cancellation?.Dispose();
 
+        Interlocked.Exchange(ref _screenPass, null)?.Cancel();
+
         foreach (var state in _regions.Values)
         {
             state.CancelInFlight();
@@ -184,7 +210,7 @@ public sealed class TranslationPipeline : IAsyncDisposable
 
                 bool anyWork = false;
 
-                if (AutomaticTranslation)
+                if (Mode == TranslationMode.Automatic)
                 {
                     foreach (var state in _regions.Values)
                     {
@@ -234,6 +260,99 @@ public sealed class TranslationPipeline : IAsyncDisposable
         foreach (var state in _regions.Values)
         {
             await ProcessRegionAsync(state, frame, force: true, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Translates every line of text on the whole game window, once.
+    ///
+    /// No crop, no change detection, no settle gate - the player asked, so the
+    /// screen as it stands right now is the answer. A second press supersedes the
+    /// first rather than queueing behind it, which is the same rule the overlay
+    /// follows: what is on screen is always the most recent thing asked for.
+    /// </summary>
+    public async Task TranslateScreenAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        using var pass = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        Interlocked.Exchange(ref _screenPass, pass)?.Cancel();
+
+        CancellationToken token = pass.Token;
+
+        ScreenPassBusy?.Invoke(this, true);
+
+        try
+        {
+            OcrResult recognized;
+            int frameWidth;
+            int frameHeight;
+
+            // Scoped tightly on purpose. This is the whole frame - eight
+            // megabytes at 1080p - and the translation that follows can take tens
+            // of seconds. It goes back to the pool before a single token is
+            // generated.
+            using (CapturedFrame? frame = await GrabAsync(token).ConfigureAwait(false))
+            {
+                if (frame is null)
+                {
+                    return;
+                }
+
+                frameWidth = frame.Width;
+                frameHeight = frame.Height;
+
+                var stopwatch = Stopwatch.StartNew();
+                recognized = await _ocr.RecognizeAsync(frame, token).ConfigureAwait(false);
+                Metrics.RecordOcr(stopwatch.Elapsed.TotalMilliseconds);
+            }
+
+            IReadOnlyList<ScreenCandidate> candidates =
+                ScreenTextFilter.Select(recognized, frameWidth, frameHeight);
+
+            if (candidates.Count == 0)
+            {
+                ScreenTranslationReady?.Invoke(this, ScreenTranslation.Empty);
+                return;
+            }
+
+            var sources = candidates.Select(static c => c.Text).ToArray();
+
+            var translationTime = Stopwatch.StartNew();
+            IReadOnlyList<string> translated = await _translator
+                .TranslateManyAsync(sources, token)
+                .ConfigureAwait(false);
+
+            // One recording for the whole batch: in this mode the translation
+            // count is requests, not sentences.
+            Metrics.RecordTranslation(translationTime.Elapsed.TotalMilliseconds);
+
+            var lines = new List<ScreenLine>(candidates.Count);
+
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                if (!string.IsNullOrWhiteSpace(translated[i]))
+                {
+                    lines.Add(new ScreenLine(candidates[i].Text, translated[i], candidates[i].Bounds));
+                }
+            }
+
+            token.ThrowIfCancellationRequested();
+            ScreenTranslationReady?.Invoke(this, new ScreenTranslation(lines));
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer press, or the session stopped.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Full-screen translation failed.");
+            Failed?.Invoke(this, $"แปลทั้งจอไม่สำเร็จ: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.CompareExchange(ref _screenPass, null, pass);
+            ScreenPassBusy?.Invoke(this, false);
         }
     }
 

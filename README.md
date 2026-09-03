@@ -88,7 +88,8 @@ Three design decisions carry most of the weight:
 |---|---|
 | `Ctrl+Alt+T` | Start / stop translating |
 | `Ctrl+Alt+R` | Draw the capture region |
-| `Ctrl+Alt+S` | Translate what is on screen once |
+| `Ctrl+Alt+S` | Translate now (the current mode decides how much) |
+| `Ctrl+Alt+F` | Translate the whole screen |
 | `Ctrl+Alt+H` | Show / hide the translated text |
 | `Ctrl+Alt+G` | Show / hide the translation area |
 | `Ctrl+Alt+C` | Switch between click-through and interactive |
@@ -100,17 +101,37 @@ saved as the differences from the defaults, so an action added in a later versio
 arrives with a working key rather than none. **คืนค่าพื้นฐาน** puts everything in
 that window back.
 
-### Automatic and on-demand translating
+### Three translating modes
 
-By default the pipeline watches the capture region and translates a line as soon
-as it settles. Turn **แปลอัตโนมัติ** off and nothing is translated until you ask:
-press `Ctrl+Alt+S`, or the **แปลครั้งเดียว** button, and the text on screen right
-now is captured, read and translated once.
+| Mode | What it does |
+|---|---|
+| **อัตโนมัติ** | Watches the capture region and translates each line as it settles. The default. |
+| **เฉพาะพื้นที่ที่เลือก** | Same region, but only when you press `Ctrl+Alt+S`. |
+| **ทั้งหน้าจอ** | Reads every line of text anywhere on the game window and draws the Thai over the original, in place. `Ctrl+Alt+F`. |
 
-On-demand is the mode to use when a game redraws its dialogue box constantly, or
-when you only want a line here and there and would rather not spend the CPU. It
-also ignores the "this is the same text as last time" guard, so pressing it twice
-on the same line really does translate it again.
+On-demand suits a game that redraws its dialogue box constantly, or a session
+where you only want a line here and there. It ignores the "same text as last
+time" guard, so pressing twice on one line really does translate it again.
+
+**Full screen** is for menus, item tables and quest logs - text scattered in
+places a single box cannot cover. One press reads the whole window, translates
+every line in **one** request, and covers each original with an opaque Thai
+label. The labels stay until the next press; `Ctrl+Alt+H` hides and shows them.
+The opacity of those labels is a slider, saved per game.
+
+It only works on demand, and that is structural rather than a preference: a whole
+game screen always has something moving on it - a clock, a health bar, an idle
+animation - so change detection over the window would fire continuously and
+translate everything several times a second.
+
+Two things to know before leaning on it. OCR reads a full screen less well than a
+tight crop, because the region path upscales a small box before reading it and a
+whole window cannot be upscaled - large dialogue text comes back well, small HUD
+text less so. And on a metered engine every press translates the whole HUD, while
+a local model on a CPU will take a long time over forty lines; the mode hint says
+so for whichever engine is selected. Lines already translated once are served
+from cache, so pressing again after the dialogue advances usually costs only the
+lines that changed.
 
 ## Translation engines
 

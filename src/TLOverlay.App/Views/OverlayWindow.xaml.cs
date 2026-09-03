@@ -29,6 +29,19 @@ public partial class OverlayWindow : Window
     private const double MinimumPanelWidth = 120;
     private const double MinimumPanelHeight = 44;
 
+    /// <summary>
+    /// Grown a little beyond the OCR rectangle. Those rectangles clip ascenders
+    /// and antialiased edges, and the whole point of an opaque box is that no
+    /// English shows around it.
+    /// </summary>
+    private const double LabelPadding = 2;
+
+    private const double MinimumLabelSize = 10;
+    private const double MinimumLabelFontSize = 9;
+
+    /// <summary>How much wider than its English a label may grow before shrinking instead.</summary>
+    private const double MaxLabelGrowth = 1.6;
+
     private readonly DispatcherTimer _topmostTimer;
 
     private Border _panel = null!;
@@ -37,12 +50,17 @@ public partial class OverlayWindow : Window
     private Thumb _resizeThumb = null!;
     private Border _outline = null!;
     private Border _modeBadge = null!;
+    private Border _busyBadge = null!;
+    private Canvas _screenLayer = null!;
 
+    private IReadOnlyList<ScreenLine> _screenLines = [];
     private IntPtr _handle;
     private IntPtr _gameWindow;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
     private bool _clickThrough = true;
     private bool _hasText;
+    private int _lastClientWidth;
+    private int _lastClientHeight;
 
     public OverlayWindow()
     {
@@ -64,6 +82,12 @@ public partial class OverlayWindow : Window
 
     /// <summary>Raised when the player finishes dragging or resizing the panel.</summary>
     public event EventHandler<RelativeRect>? PanelPlacementChanged;
+
+    /// <summary>
+    /// Raised when full-screen labels had to be dropped because the game window
+    /// changed size, so the player can be told rather than left wondering.
+    /// </summary>
+    public event EventHandler? ScreenTranslationInvalidated;
 
     /// <summary>
     /// False when the OS refused to hide the overlay from capture, which means
@@ -170,9 +194,30 @@ public partial class OverlayWindow : Window
             },
         };
 
+        _busyBadge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xF0, 0x1A, 0x4E, 0x8A)),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 7, 16, 8),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+            Child = new TextBlock
+            {
+                Text = "กำลังแปลทั้งจอ…",
+                Foreground = Brushes.White,
+                FontSize = 13,
+            },
+        };
+
+        // Its own layer, so one visibility flip hides every label and one Clear
+        // drops the lot without disturbing the panel or the region outline.
+        _screenLayer = new Canvas { IsHitTestVisible = false };
+
         Surface.Children.Add(_outline);
+        Surface.Children.Add(_screenLayer);
         Surface.Children.Add(_panel);
         Surface.Children.Add(_modeBadge);
+        Surface.Children.Add(_busyBadge);
     }
 
     private static ControlTemplate TransparentThumbTemplate()
@@ -248,6 +293,21 @@ public partial class OverlayWindow : Window
         }
 
         OverlayWindowStyles.SetBounds(_handle, x, y, width, height);
+
+        // Moving the game does not move its text relative to its own window, so
+        // the labels stay. Resizing does: the game re-flows its UI and every
+        // label is now over the wrong words, which is worse than showing none.
+        if ((_lastClientWidth != 0 || _lastClientHeight != 0)
+            && (width != _lastClientWidth || height != _lastClientHeight)
+            && _screenLines.Count > 0)
+        {
+            ClearScreenTranslation();
+            ScreenTranslationInvalidated?.Invoke(this, EventArgs.Empty);
+        }
+
+        _lastClientWidth = width;
+        _lastClientHeight = height;
+
         LayoutAll();
     }
 
@@ -291,6 +351,10 @@ public partial class OverlayWindow : Window
         _panel.Visibility = visible && (_hasText || !_clickThrough)
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+        // Hidden, not dropped: pressing the key twice has to bring the same
+        // labels back without paying for the sweep again.
+        _screenLayer.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetRegionVisible(bool visible)
@@ -301,6 +365,8 @@ public partial class OverlayWindow : Window
 
     public void ShowTranslation(RegionTranslation translation)
     {
+        ClearScreenTranslation();
+
         _hasText = true;
         _text.Text = translation.TranslatedText;
         _text.FontSize = _profile.FontSize;
@@ -312,6 +378,169 @@ public partial class OverlayWindow : Window
         LayoutPanel(translation);
         _panel.Visibility = TranslationsVisible ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>
+    /// Draws one opaque Thai label over every line the sweep found.
+    ///
+    /// Opaque by decision: the point is to replace the English, not to sit
+    /// beside it. The boxes are inflated slightly because OCR rectangles clip
+    /// ascenders and antialiased edges, and an English sliver poking out from
+    /// under Thai reads as broken.
+    /// </summary>
+    public void ShowScreenTranslation(ScreenTranslation translation)
+    {
+        ArgumentNullException.ThrowIfNull(translation);
+
+        _screenLines = translation.Lines;
+
+        // The two presentations are alternatives, not layers: showing both means
+        // the same line translated in two places.
+        if (_clickThrough)
+        {
+            _hasText = false;
+            _text.Text = string.Empty;
+            _panel.Visibility = Visibility.Collapsed;
+        }
+
+        LayoutScreenLabels();
+    }
+
+    /// <summary>Drops every full-screen label, leaving the region panel alone.</summary>
+    public void ClearScreenTranslation()
+    {
+        _screenLines = [];
+        _screenLayer.Children.Clear();
+    }
+
+    /// <summary>Shows or hides the "working on it" badge over the game.</summary>
+    public void SetScreenPassBusy(bool busy) =>
+        _busyBadge.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Repaints the label backgrounds at a new opacity, without re-translating
+    /// or re-measuring anything - the slider has to answer while it is dragged.
+    /// </summary>
+    public void SetScreenOpacity(double opacity)
+    {
+        _profile.ScreenOverlayOpacity = Math.Clamp(opacity, 0, 1);
+
+        SolidColorBrush brush = ScreenLabelBrush();
+
+        foreach (Border label in _screenLayer.Children.OfType<Border>())
+        {
+            label.Background = brush;
+        }
+    }
+
+    private SolidColorBrush ScreenLabelBrush() => new(Color.FromArgb(
+        (byte)(Math.Clamp(_profile.ScreenOverlayOpacity, 0, 1) * 255),
+        0x10,
+        0x12,
+        0x16));
+
+    private void LayoutScreenLabels()
+    {
+        _screenLayer.Children.Clear();
+
+        if (ActualWidth <= 0 || ActualHeight <= 0 || _screenLines.Count == 0)
+        {
+            return;
+        }
+
+        SolidColorBrush background = ScreenLabelBrush();
+        var typeface = new Typeface(_text.FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+
+        foreach (ScreenLine line in _screenLines)
+        {
+            double width = Math.Max(MinimumLabelSize, line.Bounds.Width * ActualWidth) + (LabelPadding * 2);
+            double height = Math.Max(MinimumLabelSize, line.Bounds.Height * ActualHeight) + (LabelPadding * 2);
+            double left = (line.Bounds.X * ActualWidth) - LabelPadding;
+            double top = (line.Bounds.Y * ActualHeight) - LabelPadding;
+
+            double fontSize = FitFontSize(line.TranslatedText, typeface, pixelsPerDip, width, height, out double needed);
+
+            // A little growth beats shrinking to unreadable: Thai is almost
+            // always longer than the English it replaces.
+            if (needed > width)
+            {
+                double grown = Math.Min(needed, width * MaxLabelGrowth);
+                left -= (grown - width) / 2;   // about the centre: game text is often centred
+                width = grown;
+            }
+
+            left = Math.Clamp(left, 0, Math.Max(0, ActualWidth - width));
+            top = Math.Clamp(top, 0, Math.Max(0, ActualHeight - height));
+
+            var label = new Border
+            {
+                Background = background,
+                CornerRadius = new CornerRadius(2),
+                Width = width,
+                MinHeight = height,
+                IsHitTestVisible = false,
+
+                // No drop shadow here, unlike the single panel: forty shadowed
+                // labels is forty render passes, and the boxes are opaque anyway.
+                Child = new TextBlock
+                {
+                    Text = line.TranslatedText,
+                    Foreground = Brushes.White,
+                    FontSize = fontSize,
+                    TextWrapping = TextWrapping.NoWrap,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(3, 0, 3, 0),
+                },
+            };
+
+            Canvas.SetLeft(label, left);
+            Canvas.SetTop(label, top);
+            _screenLayer.Children.Add(label);
+        }
+
+        _screenLayer.Visibility = TranslationsVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// The largest size this line fits its box at, and how wide it wants to be at
+    /// that size.
+    ///
+    /// Measured rather than laid out: one FormattedText and one correction, for
+    /// forty labels, instead of forty layout passes.
+    /// </summary>
+    private double FitFontSize(
+        string text,
+        Typeface typeface,
+        double pixelsPerDip,
+        double boxWidth,
+        double boxHeight,
+        out double needed)
+    {
+        double size = Math.Clamp(boxHeight * 0.68, MinimumLabelFontSize, _profile.FontSize);
+        needed = Measure(text, typeface, pixelsPerDip, size);
+
+        double usable = Math.Max(1, boxWidth - 6);
+
+        if (needed > usable)
+        {
+            size = Math.Max(MinimumLabelFontSize, size * usable / needed);
+            needed = Measure(text, typeface, pixelsPerDip, size);
+        }
+
+        return size;
+    }
+
+    private static double Measure(string text, Typeface typeface, double pixelsPerDip, double fontSize) =>
+        new FormattedText(
+            text,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            fontSize,
+            Brushes.White,
+            pixelsPerDip).Width + 6;
 
     public void ClearText()
     {
@@ -344,6 +573,7 @@ public partial class OverlayWindow : Window
         LayoutRegion();
         LayoutBadge();
         LayoutPanel(translation: null);
+        LayoutScreenLabels();
     }
 
     private void LayoutRegion()
@@ -376,6 +606,12 @@ public partial class OverlayWindow : Window
         _modeBadge.Measure(new Size(ActualWidth, ActualHeight));
         Canvas.SetLeft(_modeBadge, Math.Max(0, (ActualWidth - _modeBadge.DesiredSize.Width) / 2));
         Canvas.SetTop(_modeBadge, 24);
+
+        _busyBadge.Measure(new Size(ActualWidth, ActualHeight));
+        Canvas.SetLeft(_busyBadge, Math.Max(0, (ActualWidth - _busyBadge.DesiredSize.Width) / 2));
+
+        // Below the mode badge, so an interactive-mode sweep shows both.
+        Canvas.SetTop(_busyBadge, 24 + _modeBadge.DesiredSize.Height + 8);
     }
 
     /// <summary>

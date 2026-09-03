@@ -116,6 +116,18 @@ public sealed class GameProfile
     /// <summary>Background opacity of the translation panel, 0..1.</summary>
     public double BackgroundOpacity { get; set; } = 0.82;
 
+    /// <summary>
+    /// Opacity of the boxes drawn over the original text in full-screen mode.
+    ///
+    /// Separate from <see cref="BackgroundOpacity"/> and opaque by default,
+    /// because the two want opposite things: the subtitle panel is deliberately
+    /// see-through so the art shows behind it, while a full-screen label exists
+    /// to replace the English underneath it. Sharing one number would ship every
+    /// existing profile a half-transparent full-screen mode, with no way to tell
+    /// a deliberate 0.82 from an inherited one.
+    /// </summary>
+    public double ScreenOverlayOpacity { get; set; } = 1.0;
+
     /// <summary>Milliseconds a region must hold still before we OCR it.</summary>
     public int SettleMilliseconds { get; set; } = 150;
 

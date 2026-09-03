@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+
 namespace TLOverlay.Core.Translation;
 
 /// <summary>
@@ -46,6 +50,119 @@ public static class ChatTranslationPrompt
 
         return messages;
     }
+
+
+    /// <summary>
+    /// The instructions for translating many lines at once.
+    ///
+    /// A separate prompt rather than a reuse of <see cref="System"/>, which says
+    /// "output ONLY the Thai translation, no English echo" - the exact opposite
+    /// of what a numbered list needs. Models follow the examples over the rules,
+    /// so the batch path needs its own example too.
+    /// </summary>
+    public const string BatchSystem =
+        "You are a translation engine embedded in a video game overlay. " +
+        "The user sends numbered English lines taken from different parts of one game screen. " +
+        "Translate each line into natural, conversational Thai. " +
+        "Rules: answer with the same numbers, one line each, in the form \"1. \u0e04\u0e33\u0e41\u0e1b\u0e25\". " +
+        "Every input number must appear exactly once. " +
+        "Translate each line on its own - they are unrelated to each other. " +
+        "No explanations, no romanisation, no English echo, no extra lines. " +
+        "Copy any [[0]], [[1]] placeholder tokens through unchanged and in place.";
+
+    /// <summary>
+    /// One example is enough to lock the shape, and every extra one is paid for
+    /// on every sweep - with a hosted model, in money.
+    /// </summary>
+    public static readonly (string User, string Assistant) BatchExample =
+    (
+        "1. Start Game\n2. You have no idea what you're dealing with.\n3. Options",
+        "1. \u0e40\u0e23\u0e34\u0e48\u0e21\u0e40\u0e01\u0e21\n2. \u0e19\u0e32\u0e22\u0e44\u0e21\u0e48\u0e23\u0e39\u0e49\u0e2b\u0e23\u0e2d\u0e01\u0e27\u0e48\u0e32\u0e01\u0e33\u0e25\u0e31\u0e07\u0e22\u0e38\u0e48\u0e07\u0e01\u0e31\u0e1a\u0e2d\u0e30\u0e44\u0e23\u0e2d\u0e22\u0e39\u0e48\n3. \u0e15\u0e31\u0e49\u0e07\u0e04\u0e48\u0e32"
+    );
+
+    /// <summary>Builds the message list for a batch of lines.</summary>
+    public static List<object> BuildBatchMessages(IReadOnlyList<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        var numbered = new StringBuilder();
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            numbered.Append(i + 1).Append(". ").AppendLine(lines[i]);
+        }
+
+        return
+        [
+            new { role = "system", content = BatchSystem },
+            new { role = "user", content = BatchExample.User },
+            new { role = "assistant", content = BatchExample.Assistant },
+            new { role = "user", content = numbered.ToString().TrimEnd() },
+        ];
+    }
+
+    /// <summary>
+    /// How many output tokens a batch of this size needs.
+    ///
+    /// The single-line path's 512 is nowhere near enough for forty Thai lines,
+    /// and a truncated response loses every line after the cut.
+    /// </summary>
+    public static int MaxTokensFor(int lineCount) => Math.Clamp(96 * lineCount, 256, 8192);
+
+    /// <summary>
+    /// Reads a numbered answer back. Entries the model dropped come back null so
+    /// the caller can re-ask for exactly those rather than the whole sweep.
+    ///
+    /// Indexed by the number the model wrote rather than by position: models
+    /// reorder, and a list rebuilt by position would put every translation after
+    /// a dropped line one row out - Thai painted over the wrong English.
+    /// </summary>
+    public static IReadOnlyList<string?> ParseNumberedOutput(string? raw, int expected)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(expected);
+
+        var results = new string?[expected];
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return results;
+        }
+
+        foreach (string line in raw.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            Match match = NumberedLine.Match(line);
+
+            if (!match.Success)
+            {
+                // A preamble - "Here are the translations:" - or a blank.
+                continue;
+            }
+
+            if (!int.TryParse(match.Groups[1].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out int number)
+                || number < 1
+                || number > expected)
+            {
+                continue;
+            }
+
+            // First writer wins: a model that repeats a number is more likely to
+            // be echoing than correcting.
+            results[number - 1] ??= CleanModelOutput(match.Groups[2].Value);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// A number, a separator, then the text.
+    ///
+    /// The separator is required, and that is the whole point of this pattern: a
+    /// Thai translation can itself begin with a digit - "3 \u0e19\u0e32\u0e17\u0e35" - and a looser
+    /// rule would slice the number off the front of somebody's translation.
+    /// </summary>
+    private static readonly Regex NumberedLine = new(
+        @"^\s*(\d{1,3})\s*[\.\)\:\-]\s*(.+)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Instruct models leak scaffolding even with a strict system prompt: wrapping

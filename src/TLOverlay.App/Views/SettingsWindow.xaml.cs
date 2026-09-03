@@ -31,6 +31,7 @@ public partial class SettingsWindow : Window
         [HotKeyAction.ToggleRegionOutlines] = "ซ่อน/แสดงพื้นที่การแปล",
         [HotKeyAction.ToggleClickThrough] = "สลับโหมดเมาส์",
         [HotKeyAction.TranslateOnce] = "แปลครั้งเดียว",
+        [HotKeyAction.TranslateScreen] = "แปลทั้งหน้าจอ",
     };
 
     private readonly AppSettings _settings;

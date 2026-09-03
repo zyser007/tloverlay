@@ -33,7 +33,8 @@ public sealed class TranslationSession : IAsyncDisposable
     private GameWindow? _target;
     private bool _translationsVisible = true;
     private bool _clickThrough = true;
-    private bool _automatic = true;
+    private TranslationMode _mode = TranslationMode.Automatic;
+    private double _screenOpacity = 1.0;
     private bool _regionVisible;
     private bool _disposed;
 
@@ -94,12 +95,16 @@ public sealed class TranslationSession : IAsyncDisposable
         _pipeline = new TranslationPipeline(new WgcCaptureSource(), _ocr, translator);
         _pipeline.TranslationReady += OnTranslationReady;
         _pipeline.TextCleared += OnTextCleared;
+        _pipeline.ScreenTranslationReady += OnScreenTranslationReady;
+        _pipeline.ScreenPassBusy += OnScreenPassBusy;
         _pipeline.Failed += (_, message) => Report(message);
 
         _overlay = new OverlayWindow();
         _overlay.Show();
         _overlay.Attach(target.Handle, profile);
         _overlay.SetTranslationsVisible(_translationsVisible);
+        _overlay.SetScreenOpacity(_screenOpacity);
+        _overlay.ScreenTranslationInvalidated += OnScreenTranslationInvalidated;
         _overlay.SetRegionVisible(_regionVisible);
         _overlay.SetClickThrough(_clickThrough);
         _overlay.PanelPlacementChanged += OnPanelPlacementChanged;
@@ -126,7 +131,7 @@ public sealed class TranslationSession : IAsyncDisposable
             return;
         }
 
-        _pipeline.AutomaticTranslation = _automatic;
+        _pipeline.Mode = _mode;
         await _pipeline.StartAsync(target.Handle, profile).ConfigureAwait(true);
 
         Report($"กำลังแปล: {target.Title}");
@@ -159,21 +164,44 @@ public sealed class TranslationSession : IAsyncDisposable
 
     public bool ClickThrough => _clickThrough;
 
-    public bool AutomaticTranslation => _automatic;
+    public TranslationMode Mode => _mode;
+
+    public bool AutomaticTranslation => _mode == TranslationMode.Automatic;
 
     /// <summary>
     /// Turns continuous translation on or off without tearing the session down,
     /// so capture stays attached and the model stays loaded - an on-demand pass
     /// right after is instant rather than paying for a cold start.
     /// </summary>
-    public void SetAutomaticTranslation(bool automatic)
+    public void SetAutomaticTranslation(bool automatic) =>
+        SetMode(automatic ? TranslationMode.Automatic : TranslationMode.OnDemandRegion);
+
+    /// <summary>
+    /// Held in a field as well as pushed, so the mode survives the stop and start
+    /// that editing a capture region triggers.
+    /// </summary>
+    public void SetMode(TranslationMode mode)
     {
-        _automatic = automatic;
+        _mode = mode;
 
         if (_pipeline is not null)
         {
-            _pipeline.AutomaticTranslation = automatic;
+            _pipeline.Mode = mode;
         }
+
+        // Leaving full-screen mode leaves its labels behind otherwise, and they
+        // would sit there over a game that is now being translated a region at a
+        // time.
+        if (mode != TranslationMode.OnDemandFullScreen)
+        {
+            _overlay?.ClearScreenTranslation();
+        }
+    }
+
+    public void SetScreenOpacity(double opacity)
+    {
+        _screenOpacity = Math.Clamp(opacity, 0, 1);
+        _overlay?.SetScreenOpacity(_screenOpacity);
     }
 
     /// <summary>Translates what is on screen right now, whatever the mode.</summary>
@@ -200,6 +228,8 @@ public sealed class TranslationSession : IAsyncDisposable
         {
             _pipeline.TranslationReady -= OnTranslationReady;
             _pipeline.TextCleared -= OnTextCleared;
+            _pipeline.ScreenTranslationReady -= OnScreenTranslationReady;
+            _pipeline.ScreenPassBusy -= OnScreenPassBusy;
 
             // Disposing the pipeline also disposes capture, OCR and the
             // translator - which is what shuts the model server down.
@@ -215,6 +245,7 @@ public sealed class TranslationSession : IAsyncDisposable
         if (_overlay is not null)
         {
             _overlay.PanelPlacementChanged -= OnPanelPlacementChanged;
+            _overlay.ScreenTranslationInvalidated -= OnScreenTranslationInvalidated;
             _overlay.Close();
             _overlay = null;
         }
@@ -227,6 +258,28 @@ public sealed class TranslationSession : IAsyncDisposable
 
     private void OnTextCleared(object? sender, RegionCleared cleared) =>
         _ = _dispatcher.InvokeAsync(() => _overlay?.ClearText());
+
+    private void OnScreenTranslationReady(object? sender, ScreenTranslation translation) =>
+        _ = _dispatcher.InvokeAsync(() =>
+        {
+            _overlay?.ShowScreenTranslation(translation);
+
+            Status?.Invoke(this, translation.Lines.Count == 0
+                ? "ไม่พบข้อความที่อ่านได้บนหน้าจอ"
+                : $"แปลทั้งจอแล้ว {translation.Lines.Count} บรรทัด");
+        });
+
+    private void OnScreenPassBusy(object? sender, bool busy)
+    {
+        _ = _dispatcher.InvokeAsync(() => _overlay?.SetScreenPassBusy(busy));
+        ScreenPassBusy?.Invoke(this, busy);
+    }
+
+    private void OnScreenTranslationInvalidated(object? sender, EventArgs e) =>
+        Report("จอเกมเปลี่ยนขนาด — กดแปลทั้งจออีกครั้ง");
+
+    /// <summary>True while a full-screen pass is running, so the UI can say so.</summary>
+    public event EventHandler<bool>? ScreenPassBusy;
 
     /// <summary>Raised after a drag so the caller can write it into the profile.</summary>
     public event EventHandler<RelativeRect>? PanelPlacementChanged;

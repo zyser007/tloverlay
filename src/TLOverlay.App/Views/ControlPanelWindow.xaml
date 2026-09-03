@@ -172,20 +172,43 @@
 
             <TextBlock Text="โหมดการแปล" Style="{StaticResource CardHeading}" />
 
+            <!-- Three exclusive modes, following the mouse-mode pattern above.
+                 Full-screen has to be exclusive with automatic rather than a
+                 second switch: a whole game screen always has something moving
+                 on it, so change detection would fire continuously. -->
             <WrapPanel>
-              <ToggleButton x:Name="AutoTranslateToggle" IsChecked="True" Padding="12,6" MinWidth="0"
-                            Margin="0,0,10,6" Checked="OnAutoTranslateChanged" Unchecked="OnAutoTranslateChanged">
+              <RadioButton x:Name="AutoTranslateOption" GroupName="TranslateMode" IsChecked="True"
+                           Checked="OnTranslateModeChanged" Margin="0,0,20,6" VerticalContentAlignment="Center">
                 <StackPanel Orientation="Horizontal">
                   <Path Data="{StaticResource IconRefresh}" Style="{StaticResource ButtonIcon}" />
-                  <TextBlock Text="แปลอัตโนมัติ" />
+                  <TextBlock Text="อัตโนมัติ" />
                 </StackPanel>
-              </ToggleButton>
+              </RadioButton>
 
-              <Button x:Name="TranslateOnceButton" Click="OnTranslateOnceClick" Padding="12,6" MinWidth="0"
-                      Margin="0,0,0,6" IsEnabled="False" ToolTip="แปลสิ่งที่อยู่บนจอตอนนี้หนึ่งครั้ง">
+              <RadioButton x:Name="OnDemandRegionOption" GroupName="TranslateMode"
+                           Checked="OnTranslateModeChanged" Margin="0,0,20,6" VerticalContentAlignment="Center">
                 <StackPanel Orientation="Horizontal">
-                  <Path Data="{StaticResource IconOnce}" Style="{StaticResource ButtonIconFilled}" />
-                  <TextBlock Text="แปลครั้งเดียว" />
+                  <Path Data="{StaticResource IconRegion}" Style="{StaticResource ButtonIcon}" />
+                  <TextBlock Text="เฉพาะพื้นที่ที่เลือก" />
+                </StackPanel>
+              </RadioButton>
+
+              <RadioButton x:Name="FullScreenOption" GroupName="TranslateMode"
+                           Checked="OnTranslateModeChanged" Margin="0,0,0,6" VerticalContentAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                  <Path Data="{StaticResource IconScreen}" Style="{StaticResource ButtonIcon}" />
+                  <TextBlock Text="ทั้งหน้าจอ" />
+                </StackPanel>
+              </RadioButton>
+            </WrapPanel>
+
+            <WrapPanel Margin="0,4,0,0">
+              <Button x:Name="TranslateOnceButton" Click="OnTranslateOnceClick" Padding="12,6" MinWidth="0"
+                      Margin="0,0,10,6" IsEnabled="False">
+                <StackPanel Orientation="Horizontal">
+                  <Path x:Name="TranslateOnceIcon" Data="{StaticResource IconOnce}"
+                        Style="{StaticResource ButtonIconFilled}" />
+                  <TextBlock x:Name="TranslateOnceText" Text="แปลครั้งเดียว" />
                 </StackPanel>
               </Button>
             </WrapPanel>
@@ -195,6 +218,15 @@
                        FontSize="12"
                        TextWrapping="Wrap"
                        Margin="0,8,0,0" />
+
+            <!-- Only meaningful in full-screen mode, so it appears with it. -->
+            <StackPanel x:Name="ScreenOpacityPanel" Visibility="Collapsed" Margin="0,10,0,0">
+              <TextBlock x:Name="ScreenOpacityLabel" Style="{StaticResource CardHeading}" Margin="0,0,0,4" />
+              <Slider x:Name="ScreenOpacitySlider" Style="{StaticResource ThinSlider}"
+                      Minimum="0.4" Maximum="1.0" Value="1.0" Width="220"
+                      HorizontalAlignment="Left"
+                      ValueChanged="OnScreenOpacityChanged" />
+            </StackPanel>
           </StackPanel>
         </Border>
 

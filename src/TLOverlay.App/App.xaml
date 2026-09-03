@@ -79,6 +79,7 @@
     <Geometry x:Key="IconText">M 5,6 H 19 M 12,6 V 19 M 9,19 H 15</Geometry>
     <Geometry x:Key="IconPointer">M 6,3 L 6,18 L 10,14 L 13,20.5 L 15.5,19.5 L 12.5,13.5 L 18,13.5 Z</Geometry>
     <Geometry x:Key="IconOnce">M 13,2 L 6,13 H 11 L 10,22 L 18,10 H 12 Z</Geometry>
+    <Geometry x:Key="IconScreen">M 3,5 H 21 V 16 H 3 Z M 8,20 H 16 M 12,16 V 20 M 6,9 H 13 M 6,12 H 11</Geometry>
     <Geometry x:Key="IconSettings">M 12,9 A 3,3 0 1 0 12,15 A 3,3 0 1 0 12,9 M 12,3 L 13.2,5.6 L 16,5 L 17.5,7.4 L 15.8,9.6 A 6,6 0 0 1 15.8,14.4 L 17.5,16.6 L 16,19 L 13.2,18.4 L 12,21 L 10.8,18.4 L 8,19 L 6.5,16.6 L 8.2,14.4 A 6,6 0 0 1 8.2,9.6 L 6.5,7.4 L 8,5 L 10.8,5.6 Z</Geometry>
     <Geometry x:Key="IconDownload">M 12,3 V 15 M 7,10 L 12,15 L 17,10 M 4,20 H 20</Geometry>
     <Geometry x:Key="IconFolder">M 3,7 H 9 L 11,9.5 H 21 V 19 H 3 Z</Geometry>
@@ -103,7 +104,59 @@
       <Setter Property="StrokeThickness" Value="0" />
     </Style>
 
-    <Style x:Key="Card" TargetType="Border">
+    <!--
+    The only Slider in the app, so it carries its own look rather than a theme:
+    the stock template is a different visual language from everything else here.
+    Same two brushes the update ProgressBar uses.
+  -->
+  <Style x:Key="ThinSlider" TargetType="Slider">
+    <Setter Property="Height" Value="22" />
+    <Setter Property="MinWidth" Value="150" />
+    <Setter Property="IsSnapToTickEnabled" Value="True" />
+    <Setter Property="TickFrequency" Value="0.05" />
+    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+    <Setter Property="Background" Value="{StaticResource TrackBackground}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Slider">
+          <Grid VerticalAlignment="Center">
+            <Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" />
+            <Track x:Name="PART_Track">
+              <Track.DecreaseRepeatButton>
+                <RepeatButton Command="Slider.DecreaseLarge" Focusable="False" Height="4">
+                  <RepeatButton.Template>
+                    <ControlTemplate TargetType="RepeatButton">
+                      <Border Height="4" CornerRadius="2" Background="{StaticResource AccentBrush}" />
+                    </ControlTemplate>
+                  </RepeatButton.Template>
+                </RepeatButton>
+              </Track.DecreaseRepeatButton>
+              <Track.IncreaseRepeatButton>
+                <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" Height="4">
+                  <RepeatButton.Template>
+                    <ControlTemplate TargetType="RepeatButton">
+                      <Border Background="Transparent" />
+                    </ControlTemplate>
+                  </RepeatButton.Template>
+                </RepeatButton>
+              </Track.IncreaseRepeatButton>
+              <Track.Thumb>
+                <Thumb Width="14" Height="14" Focusable="False">
+                  <Thumb.Template>
+                    <ControlTemplate TargetType="Thumb">
+                      <Ellipse Fill="{StaticResource AccentBrush}" />
+                    </ControlTemplate>
+                  </Thumb.Template>
+                </Thumb>
+              </Track.Thumb>
+            </Track>
+          </Grid>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style x:Key="Card" TargetType="Border">
       <Setter Property="Background" Value="{StaticResource SurfaceBackground}" />
       <Setter Property="BorderBrush" Value="{StaticResource SurfaceBorder}" />
       <Setter Property="BorderThickness" Value="1" />
