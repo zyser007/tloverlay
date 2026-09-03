@@ -58,6 +58,8 @@ jobs:
         run: |
           $exe = "artifacts/TLOverlay-win-x64/TLOverlay.exe"
           if (-not (Test-Path $exe)) { throw "TLOverlay.exe was not produced" }
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "TLOverlay.exe is $mb MB"
 
       # Building every window without showing one. This is the check 0.3.0
       # needed and did not have: the panel threw while its XAML was still being
@@ -75,18 +77,20 @@ jobs:
             -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow
 
           # A window that blocks on a dialog would otherwise hang the job for
-          # hours rather than failing it.
-          if (-not $process.WaitForExit(120000)) {
-            $process.Kill()
+          # hours rather than failing it. The captured output is printed either
+          # way: on a hang, the last line it reached is the only clue there is.
+          $exited = $process.WaitForExit(120000)
+          if (-not $exited) { $process.Kill() }
+
+          Get-Content $out, $err -ErrorAction SilentlyContinue
+
+          if (-not $exited) {
             throw "TLOverlay --self-test did not exit within 120 seconds"
           }
 
-          Get-Content $out, $err -ErrorAction SilentlyContinue
           if ($process.ExitCode -ne 0) {
             throw "TLOverlay --self-test exited with $($process.ExitCode)"
           }
-          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
-          Write-Host "TLOverlay.exe is $mb MB"
 
       - name: Upload the build
         uses: actions/upload-artifact@v4

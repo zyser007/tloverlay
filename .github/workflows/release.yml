@@ -69,12 +69,17 @@ jobs:
           $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru `
             -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow
 
-          if (-not $process.WaitForExit(120000)) {
-            $process.Kill()
+          # The captured output is printed either way: on a hang, the last line
+          # it reached is the only clue there is.
+          $exited = $process.WaitForExit(120000)
+          if (-not $exited) { $process.Kill() }
+
+          Get-Content $out, $err -ErrorAction SilentlyContinue
+
+          if (-not $exited) {
             throw "TLOverlay --self-test did not exit within 120 seconds"
           }
 
-          Get-Content $out, $err -ErrorAction SilentlyContinue
           if ($process.ExitCode -ne 0) {
             throw "TLOverlay --self-test exited with $($process.ExitCode)"
           }

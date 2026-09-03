@@ -78,8 +78,16 @@ public partial class App : Application
         // still being parsed and the app could not open at all.
         if (e.Args.Any(static arg => string.Equals(arg, "--self-test", StringComparison.OrdinalIgnoreCase)))
         {
-            Shutdown(SelfTest());
-            return;
+            int code = SelfTest();
+
+            Console.Out.Flush();
+            Console.Error.Flush();
+
+            // Environment.Exit rather than Shutdown: the windows above were built
+            // and never shown, and getting WPF to tear that down cleanly is not
+            // what this check is for. Whether constructing them threw is the
+            // whole answer, and it is already known by this line.
+            Environment.Exit(code);
         }
 
         base.OnStartup(e);
@@ -125,18 +133,36 @@ public partial class App : Application
     /// </summary>
     private static int SelfTest()
     {
+        // Announced one step at a time, because the failure this guards against
+        // can also be a hang rather than a throw - and then the last line printed
+        // is the only thing that says where.
+        static void Step(string what)
+        {
+            Console.Out.WriteLine($"self-test: {what}");
+            Console.Out.Flush();
+        }
+
         try
         {
+            Step("loading settings");
             var settings = SettingsStore.Load(DataDirectory);
+
+            Step("hotkey service");
             using var hotKeys = new GlobalHotKeyService();
+
+            Step("update service");
             var updates = new UpdateService(settings);
 
+            Step("SetupWindow");
             _ = new SetupWindow(settings);
+
+            Step("SettingsWindow");
             _ = new SettingsWindow(settings, hotKeys, updates);
+
+            Step("ControlPanelWindow");
             _ = new ControlPanelWindow();
 
-            Console.Out.WriteLine("self-test: every window was built.");
-            Console.Out.Flush();
+            Step("every window was built");
             return 0;
         }
         catch (Exception ex)
