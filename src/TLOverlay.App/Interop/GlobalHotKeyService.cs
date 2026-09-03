@@ -1,11 +1,58 @@
 using System.Windows.Input;
 using System.Windows.Interop;
 using Serilog;
+using TLOverlay.Core.Input;
 
 namespace TLOverlay.App.Interop;
 
 /// <summary>One hotkey: what it does, how it is registered, and how it is written.</summary>
-public sealed record HotKeyBinding(HotKeyAction Action, uint Modifiers, Key Key, string Gesture);
+public sealed record HotKeyBinding(HotKeyAction Action, uint Modifiers, Key Key, string Gesture)
+{
+    /// <summary>
+    /// Builds a binding from a gesture the player chose, or returns null when the
+    /// key name does not map to a real key - which is what a hand-edited
+    /// settings file can contain.
+    /// </summary>
+    public static HotKeyBinding? FromGesture(HotKeyAction action, HotKeyGesture gesture)
+    {
+        if (!gesture.IsValid || !Enum.TryParse(gesture.KeyName, ignoreCase: true, out Key key) || key == Key.None)
+        {
+            return null;
+        }
+
+        uint modifiers = 0;
+
+        if (gesture.Control)
+        {
+            modifiers |= NativeMethods.ModControl;
+        }
+
+        if (gesture.Alt)
+        {
+            modifiers |= NativeMethods.ModAlt;
+        }
+
+        if (gesture.Shift)
+        {
+            modifiers |= NativeMethods.ModShift;
+        }
+
+        if (gesture.Windows)
+        {
+            modifiers |= NativeMethods.ModWin;
+        }
+
+        return new HotKeyBinding(action, modifiers, key, gesture.ToString());
+    }
+
+    /// <summary>The gesture this binding was written from.</summary>
+    public HotKeyGesture ToGesture() => new(
+        (Modifiers & NativeMethods.ModControl) != 0,
+        (Modifiers & NativeMethods.ModAlt) != 0,
+        (Modifiers & NativeMethods.ModShift) != 0,
+        (Modifiers & NativeMethods.ModWin) != 0,
+        Key.ToString());
+}
 
 public enum HotKeyAction
 {
@@ -70,11 +117,26 @@ public sealed class GlobalHotKeyService : IDisposable
     /// which happens when another application already owns the combination -
     /// worth telling the player rather than leaving a key that does nothing.
     /// </summary>
-    public IReadOnlyList<HotKeyBinding> RegisterDefaults()
+    public IReadOnlyList<HotKeyBinding> RegisterDefaults() => Register(Defaults);
+
+    /// <summary>
+    /// Replaces every registered key with this set, and reports which ones another
+    /// application already owns.
+    ///
+    /// Replaces rather than adds: the settings window re-registers on every
+    /// change, and leaving the previous keys bound would mean an old combination
+    /// kept working long after the player rebound it.
+    /// </summary>
+    public IReadOnlyList<HotKeyBinding> Register(IEnumerable<HotKeyBinding> bindings)
     {
+        ArgumentNullException.ThrowIfNull(bindings);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        UnregisterAll();
+
         var failures = new List<HotKeyBinding>();
 
-        foreach (var binding in Defaults)
+        foreach (HotKeyBinding binding in bindings)
         {
             if (!Register(binding.Action, binding.Modifiers, binding.Key))
             {
@@ -83,6 +145,16 @@ public sealed class GlobalHotKeyService : IDisposable
         }
 
         return failures;
+    }
+
+    public void UnregisterAll()
+    {
+        foreach (int id in _actions.Keys)
+        {
+            NativeMethods.UnregisterHotKey(_source.Handle, id);
+        }
+
+        _actions.Clear();
     }
 
     public bool Register(HotKeyAction action, uint modifiers, Key key)
@@ -124,12 +196,7 @@ public sealed class GlobalHotKeyService : IDisposable
 
         _disposed = true;
 
-        foreach (int id in _actions.Keys)
-        {
-            NativeMethods.UnregisterHotKey(_source.Handle, id);
-        }
-
-        _actions.Clear();
+        UnregisterAll();
         _source.RemoveHook(WndProc);
         _source.Dispose();
     }

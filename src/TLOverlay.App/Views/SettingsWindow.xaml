@@ -1,0 +1,84 @@
+<Window x:Class="TLOverlay.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="TLOverlay — ตั้งค่า"
+        Icon="/Assets/tloverlay.ico"
+        Height="620" Width="560"
+        MinHeight="360" MinWidth="480"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource PanelBackground}"
+        FontFamily="{StaticResource ThaiUiFont}">
+
+  <Grid Margin="18">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  Padding="0,0,4,0">
+      <StackPanel>
+
+        <Border Style="{StaticResource Card}">
+          <StackPanel>
+            <TextBlock Text="คีย์ลัด" Style="{StaticResource CardHeading}" />
+            <TextBlock Text="กดที่ปุ่มคีย์ลัด แล้วกดคีย์ที่ต้องการ · ต้องมี Ctrl, Alt หรือ Shift อย่างน้อยหนึ่งตัว · Esc = ยกเลิก"
+                       Foreground="{StaticResource PanelMuted}" FontSize="11.5"
+                       TextWrapping="Wrap" Margin="0,0,0,10" />
+
+            <!-- One row per action, built in code from the same list the keys are
+                 registered from. -->
+            <ItemsControl x:Name="HotKeyList" />
+
+            <TextBlock x:Name="HotKeyWarning" Foreground="{StaticResource WarningBrush}" FontSize="11.5"
+                       TextWrapping="Wrap" Margin="0,8,0,0" />
+          </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+          <StackPanel>
+            <TextBlock Text="การอัพเดทโปรแกรม" Style="{StaticResource CardHeading}" />
+
+            <TextBlock x:Name="VersionText" Foreground="{StaticResource PanelMuted}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,0,0,8" />
+
+            <WrapPanel>
+              <ComboBox x:Name="UpdatePolicyCombo" Width="220" Padding="8,5" Margin="0,0,10,6"
+                        SelectionChanged="OnUpdatePolicyChanged" />
+
+              <Button x:Name="CheckUpdatesButton" Click="OnCheckUpdatesClick"
+                      Padding="12,6" MinWidth="0" Margin="0,0,0,6">
+                <StackPanel Orientation="Horizontal">
+                  <Path Data="{StaticResource IconRefresh}" Style="{StaticResource ButtonIcon}" />
+                  <TextBlock Text="ตรวจสอบตอนนี้" />
+                </StackPanel>
+              </Button>
+            </WrapPanel>
+
+            <TextBlock x:Name="UpdateHint" Foreground="{StaticResource PanelMuted}" FontSize="12"
+                       TextWrapping="Wrap" Margin="0,4,0,0" />
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Grid Grid.Row="1" Margin="0,14,0,0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <Button Grid.Column="0" x:Name="ResetButton" Click="OnResetClick" Padding="12,6" MinWidth="0">
+        <StackPanel Orientation="Horizontal">
+          <Path Data="{StaticResource IconReset}" Style="{StaticResource ButtonIcon}" />
+          <TextBlock Text="คืนค่าพื้นฐาน" />
+        </StackPanel>
+      </Button>
+
+      <Button Grid.Column="1" Content="ปิด" Click="OnCloseClick" IsCancel="True"
+              HorizontalAlignment="Right" />
+    </Grid>
+  </Grid>
+</Window>

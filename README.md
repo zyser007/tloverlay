@@ -93,6 +93,13 @@ Three design decisions carry most of the weight:
 | `Ctrl+Alt+G` | Show / hide the translation area |
 | `Ctrl+Alt+C` | Switch between click-through and interactive |
 
+These are the defaults; all six can be rebound under **ตั้งค่า**. A binding needs
+at least one of Ctrl, Alt or Shift - a global hotkey with no modifier is
+swallowed system-wide, which would take that key away from the game. Changes are
+saved as the differences from the defaults, so an action added in a later version
+arrives with a working key rather than none. **คืนค่าพื้นฐาน** puts everything in
+that window back.
+
 ### Automatic and on-demand translating
 
 By default the pipeline watches the capture region and translates a line as soon
@@ -215,6 +222,11 @@ Three of those flags are load-bearing, and one option must stay off:
   the native `e_sqlite3.dll`. Without this it never leaves the bundle and the
   translation cache throws on the first lookup, at runtime, on the user's
   machine.
+- `-p:EnableCompressionInSingleFile=true` - halves the executable, from about
+  183 MB to about 75 MB. That is the file the in-app updater downloads, so
+  without it every update costs the user two and a half times the data of the
+  zip. The price is a few hundred milliseconds of decompression at startup,
+  once per launch, which nobody waiting for a game to load will notice.
 - `--runtime win-x64` - required for a self-contained build, and the only
   architecture the capture interop targets.
 - **Never `-p:PublishTrimmed=true`.** WPF does not support trimming. The build

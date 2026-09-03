@@ -41,6 +41,7 @@ public partial class ControlPanelWindow : Window
 
     private TranslationSession? _session;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
+    private IReadOnlyList<HotKeyBinding> _bindings = GlobalHotKeyService.Defaults;
     private UpdateManifest? _availableUpdate;
     private bool _busy;
     private bool _updating;
@@ -54,7 +55,8 @@ public partial class ControlPanelWindow : Window
         WindowList.ItemsSource = Windows;
 
         _hotKeys.Pressed += OnHotKey;
-        var failed = _hotKeys.RegisterDefaults();
+        _bindings = HotKeyProfile.Load(_settings);
+        var failed = _hotKeys.Register(_bindings);
 
         BuildHotKeyGrid(failed);
         UpdateMouseModeHint();
@@ -68,7 +70,6 @@ public partial class ControlPanelWindow : Window
         _metricsTimer.Start();
 
         _updates = new UpdateService(_settings);
-        BuildUpdateCard();
 
         Loaded += (_, _) =>
         {
@@ -102,7 +103,7 @@ public partial class ControlPanelWindow : Window
     {
         HotKeyGrid.Children.Clear();
 
-        foreach (var binding in GlobalHotKeyService.Defaults)
+        foreach (var binding in _bindings)
         {
             bool available = !failed.Contains(binding);
 
@@ -482,44 +483,32 @@ public partial class ControlPanelWindow : Window
             : $"ยังตั้งค่าไม่ครบ ({engine}) — ยังแปลไม่ได้";
     }
 
+    private void OnSettingsClick(object sender, RoutedEventArgs e)
+    {
+        var window = new SettingsWindow(_settings, _hotKeys, _updates) { Owner = this };
+
+        // A manual check in there still belongs on the banner out here.
+        window.UpdateFound += (_, manifest) =>
+        {
+            _availableUpdate = manifest;
+            ShowUpdateBanner(manifest);
+        };
+
+        window.ShowDialog();
+
+        if (window.HotKeysChanged)
+        {
+            _bindings = HotKeyProfile.Load(_settings);
+            BuildHotKeyGrid(_hotKeys.Register(_bindings));
+        }
+    }
+
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();
 
     /// <summary>
     /// Fills the update card. Built in code so the policy list and the running
     /// version come from one place rather than being restated in XAML.
     /// </summary>
-    private void BuildUpdateCard()
-    {
-        UpdatePolicyCombo.ItemsSource = new[]
-        {
-            new PolicyChoice(UpdatePolicy.Notify, "แจ้งเตือนเมื่อมีเวอร์ชันใหม่"),
-            new PolicyChoice(UpdatePolicy.Automatic, "ดาวน์โหลดให้อัตโนมัติ"),
-            new PolicyChoice(UpdatePolicy.Off, "ไม่ต้องตรวจสอบ"),
-        };
-
-        UpdatePolicyCombo.DisplayMemberPath = nameof(PolicyChoice.Label);
-        UpdatePolicyCombo.SelectedItem = ((PolicyChoice[])UpdatePolicyCombo.ItemsSource)
-            .FirstOrDefault(choice => choice.Policy == _settings.Updates);
-
-        VersionText.Text = $"เวอร์ชันปัจจุบัน {App.Version}";
-
-        UpdateHint.Text = UpdateService.CanSelfUpdate
-            ? string.Empty
-            : "โฟลเดอร์ที่ติดตั้งอยู่เขียนไฟล์ไม่ได้ จึงอัพเดทให้อัตโนมัติไม่ได้ — ต้องดาวน์โหลดมาแทนที่เอง";
-    }
-
-    private void OnUpdatePolicyChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!IsLoaded || UpdatePolicyCombo.SelectedItem is not PolicyChoice choice)
-        {
-            return;
-        }
-
-        _updates.SetPolicy(choice.Policy);
-    }
-
-    private void OnCheckUpdatesClick(object sender, RoutedEventArgs e) => _ = CheckForUpdatesAsync(force: true);
-
     /// <summary>
     /// Looks for a new version. <paramref name="force"/> is the player pressing
     /// the button, which reports "you are up to date" rather than saying nothing.
@@ -533,21 +522,10 @@ public partial class ControlPanelWindow : Window
 
         try
         {
-            if (force)
-            {
-                CheckUpdatesButton.IsEnabled = false;
-                UpdateHint.Text = "กำลังตรวจสอบ…";
-            }
-
             UpdateManifest? found = await _updates.CheckAsync(force);
 
             if (found is null)
             {
-                if (force)
-                {
-                    UpdateHint.Text = $"ใช้เวอร์ชันล่าสุดอยู่แล้ว ({App.Version})";
-                }
-
                 return;
             }
 
@@ -564,15 +542,12 @@ public partial class ControlPanelWindow : Window
             Log.Warning(ex, "Update check failed.");
 
             // Only ever said out loud when the player asked: a background check
-            // that cannot reach GitHub is not their problem to hear about.
+            // that cannot reach GitHub is not their problem to hear about. The
+            // settings window reports its own manual checks.
             if (force)
             {
-                UpdateHint.Text = $"ตรวจสอบไม่สำเร็จ: {ex.Message}";
+                StatusText.Text = $"ตรวจสอบเวอร์ชันใหม่ไม่สำเร็จ: {ex.Message}";
             }
-        }
-        finally
-        {
-            CheckUpdatesButton.IsEnabled = true;
         }
     }
 
@@ -700,9 +675,6 @@ public partial class ControlPanelWindow : Window
             UpdateProgress.Visibility = Visibility.Collapsed;
         }
     }
-
-    /// <summary>One row of the update policy dropdown.</summary>
-    private sealed record PolicyChoice(UpdatePolicy Policy, string Label);
 
     private async void OnClosed(object? sender, EventArgs e)
     {

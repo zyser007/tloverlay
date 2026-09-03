@@ -42,6 +42,13 @@ public sealed class AppSettings
     public string? SkippedVersion { get; set; }
 
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+
+    /// <summary>
+    /// Hotkeys the player changed, by action name: {"ToggleTranslation":
+    /// "Ctrl+Shift+T"}. Only the differences are kept, so an action added later
+    /// arrives with a working default rather than no key at all.
+    /// </summary>
+    public Dictionary<string, string> HotKeys { get; set; } = [];
 }
 
 /// <summary>Reads and writes settings.json under %LocalAppData%\TLOverlay.</summary>
