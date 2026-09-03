@@ -4,7 +4,8 @@ Real-time English -> Thai translation overlay for games running in **Windowed
 Fullscreen (borderless)** on Windows 10 / 11.
 
 โปรแกรม overlay แปลอังกฤษเป็นไทยแบบเรียลไทม์ สำหรับเกมที่รันแบบ Windowed Fullscreen
-บน Windows 10/11 — ทำงานออฟไลน์ 100% ไม่ต้องต่อเน็ต ไม่ inject DLL เข้าเกม
+บน Windows 10/11 — ไม่ inject DLL เข้าเกม แปลได้ทั้งแบบออฟไลน์ 100% ด้วยโมเดลในเครื่อง
+หรือผ่าน Google / OpenAI สำหรับเครื่องสเปกต่ำที่รันโมเดลเองไม่ไหว
 
 ## Download
 
@@ -56,6 +57,8 @@ Three design decisions carry most of the weight:
 - The game must run **Windowed Fullscreen / Borderless**. True exclusive
   fullscreen cannot be captured.
 - English OCR language pack (present by default on virtually all installs)
+- For the local engine, roughly 3 GB of free RAM. For Google or OpenAI, a
+  connection instead - see [Translation engines](#translation-engines).
 - Nothing else. Release builds are self-contained, so no .NET runtime install.
 
 **To build**
@@ -102,7 +105,49 @@ when you only want a line here and there and would rather not spend the CPU. It
 also ignores the "this is the same text as last time" guard, so pressing it twice
 on the same line really does translate it again.
 
+## Translation engines
+
+Three, chosen in Setup. The pipeline in front of them - capture, change
+detection, OCR, sentence assembly, glossary, cache - is the same either way; only
+the last step moves.
+
+| Engine | Needs | Privacy | Cost |
+|---|---|---|---|
+| **Local model** (default) | ~3 GB free RAM, a 0.8-2.4 GB download | Nothing leaves the machine | Free |
+| **Google Translate** | Nothing, or a Cloud Translation key | Game text goes to Google | Free, or per character |
+| **OpenAI-compatible** | An API key | Game text goes to the provider | Per line |
+
+The local model is the default and the only fully offline option. It is also the
+one that does not fit everywhere: a machine with 8 GB of RAM and a game already
+running has no 3 GB to spare, and on a slow CPU a line can take longer than the
+dialogue stays on screen. That is what the other two are for.
+
+**Google** works with no account at all. Without a key it uses the endpoint the
+Google Translate web page itself calls - undocumented, rate-limited per IP
+address, and something Google can change or withdraw without notice. Setup says
+so where the choice is made rather than letting it be discovered mid-game. With a
+Cloud Translation API key it uses the documented, billed v2 API instead.
+
+**OpenAI-compatible** gives the most natural Thai of the three for game dialogue,
+because it gets the same prompt and the same few-shot examples the local model
+does - switching between them changes the speed and the bill, not the voice. The
+endpoint is configurable, so the same setting points at OpenRouter, Groq, or a
+model running on another PC in the house.
+
+API keys are encrypted with DPAPI under the current Windows account before they
+are written to `settings.json`, so a settings file that ends up in a bug report
+or a backup does not hand over someone's billing credentials. Setup has a **test**
+button that translates one sentence and shows the result - a wrong key or model
+name otherwise surfaces much later as an overlay that silently never says
+anything.
+
+The cache is keyed on the engine's identity, so switching engines never serves
+one engine's lines from another's.
+
 ## Models
+
+These are for the local engine only - on Google or OpenAI there is nothing to
+download.
 
 The translation model and `llama-server.exe` are **not** in this repository, and
 you do not need a terminal to get them. Run the app: if either is missing it

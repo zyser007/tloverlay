@@ -11,6 +11,7 @@ using TLOverlay.App.Services;
 using TLOverlay.Core.Capture;
 using TLOverlay.Core.Profiles;
 using TLOverlay.Core.Setup;
+using TLOverlay.Core.Translation;
 using TLOverlay.Core.Update;
 
 namespace TLOverlay.App.Views;
@@ -467,9 +468,18 @@ public partial class ControlPanelWindow : Window
         // player switches model or moves the work between CPU and GPU.
         new SetupWindow(_settings) { Owner = this }.ShowDialog();
 
-        StatusText.Text = TranslatorFactory.IsModelInstalled(_settings.Translator, _settings.InstallRoot)
-            ? "โมเดลพร้อมใช้งานแล้ว"
-            : "ยังตั้งค่าโมเดลไม่ครบ — ยังแปลไม่ได้";
+        // Naming the engine is the point: a cloud engine sends the game's text
+        // off this machine, and that should be visible without opening a dialog.
+        string engine = _settings.Translator.Backend switch
+        {
+            TranslationBackend.Google => "Google แปลภาษา",
+            TranslationBackend.OpenAi => $"OpenAI · {_settings.Translator.OpenAiModel}",
+            _ => "โมเดลในเครื่อง",
+        };
+
+        StatusText.Text = TranslatorFactory.IsReadyToTranslate(_settings.Translator, _settings.InstallRoot)
+            ? $"พร้อมแปลแล้ว — {engine}"
+            : $"ยังตั้งค่าไม่ครบ ({engine}) — ยังแปลไม่ได้";
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e) => Refresh();

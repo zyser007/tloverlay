@@ -16,22 +16,6 @@ namespace TLOverlay.Core.Translation;
 /// </summary>
 public sealed class LlamaSidecarTranslator : ITranslator
 {
-    private const string SystemPrompt =
-        "You are a translation engine embedded in a video game overlay. " +
-        "Translate the user's English text into natural, conversational Thai. " +
-        "Rules: output ONLY the Thai translation; no explanations, no romanisation, " +
-        "no quotation marks around the result, no English echo. " +
-        "Keep the register of game dialogue rather than formal written Thai. " +
-        "Copy any [[0]], [[1]] placeholder tokens through unchanged and in place.";
-
-    // Two shots are enough to lock the output shape; more just costs prompt time
-    // on every uncached line.
-    private static readonly (string User, string Assistant)[] FewShot =
-    [
-        ("You have no idea what you're dealing with.", "นายไม่รู้หรอกว่ากำลังยุ่งกับอะไรอยู่"),
-        ("[[0]] restores 40 HP to a single ally.", "[[0]] ฟื้นฟู HP 40 หน่วยให้พวกพ้องหนึ่งคน"),
-    ];
-
     private readonly LlamaServerOptions _options;
     private readonly LlamaServerProcess _server;
     private readonly HttpClient _client;
@@ -93,23 +77,10 @@ public sealed class LlamaSidecarTranslator : ITranslator
 
     private object BuildRequest(string sourceText)
     {
-        var messages = new List<object>(2 + (FewShot.Length * 2))
-        {
-            new { role = "system", content = SystemPrompt },
-        };
-
-        foreach (var (user, assistant) in FewShot)
-        {
-            messages.Add(new { role = "user", content = user });
-            messages.Add(new { role = "assistant", content = assistant });
-        }
-
-        messages.Add(new { role = "user", content = sourceText });
-
         return new
         {
             model = _options.ModelId,
-            messages,
+            messages = ChatTranslationPrompt.BuildMessages(sourceText),
             // Near-greedy: we want the same line to translate the same way every
             // time it appears, otherwise the cache and the player both suffer.
             temperature = 0.1,
@@ -134,57 +105,7 @@ public sealed class LlamaSidecarTranslator : ITranslator
         return string.Empty;
     }
 
-    /// <summary>
-    /// Instruct models leak scaffolding even with a strict system prompt: wrapping
-    /// quotes, a "Thai:" label, or a trailing note. Strip the common shapes rather
-    /// than showing them over the game.
-    /// </summary>
-    internal static string CleanModelOutput(string raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return string.Empty;
-        }
-
-        string text = raw.Trim();
-
-        foreach (string label in new[] { "Thai:", "Translation:", "คำแปล:", "แปล:" })
-        {
-            if (text.StartsWith(label, StringComparison.OrdinalIgnoreCase))
-            {
-                text = text[label.Length..].TrimStart();
-            }
-        }
-
-        text = TrimMatchingQuotes(text);
-
-        // Reasoning-flavoured models sometimes append a note after a blank line.
-        int blankLine = text.IndexOf("\n\n", StringComparison.Ordinal);
-        if (blankLine > 0)
-        {
-            text = text[..blankLine];
-        }
-
-        return text.Trim();
-    }
-
-    private static string TrimMatchingQuotes(string text)
-    {
-        if (text.Length < 2)
-        {
-            return text;
-        }
-
-        char first = text[0];
-        char last = text[^1];
-
-        bool matched =
-            (first == '"' && last == '"')
-            || (first == '\'' && last == '\'')
-            || (first == '“' && last == '”');
-
-        return matched ? text[1..^1].Trim() : text;
-    }
+    internal static string CleanModelOutput(string raw) => ChatTranslationPrompt.CleanModelOutput(raw);
 
     public async ValueTask DisposeAsync()
     {

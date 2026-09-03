@@ -57,7 +57,75 @@
                      Margin="0,4,0,0" />
         </StackPanel>
 
-        <!-- Where the two big files go. First, because it decides where the rest lands. -->
+        <!--
+          The engine, first: it decides whether any of the rows below matter. A
+          machine that cannot hold a model is exactly the machine whose owner
+          must not be walked through downloading one.
+        -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+          <StackPanel>
+            <TextBlock Text="เครื่องมือแปล" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+            <RadioButton x:Name="LocalEngineOption" GroupName="Engine" IsChecked="True"
+                         Checked="OnEngineChanged" Margin="0,0,0,6">
+              <StackPanel>
+                <TextBlock Text="โมเดลในเครื่อง (ออฟไลน์ 100%)" FontWeight="SemiBold" />
+                <TextBlock Text="ฟรี ไม่ส่งข้อความออกนอกเครื่อง แต่ต้องมีแรมว่างราว 3 GB และแปลช้ากว่าบน CPU"
+                           Foreground="{StaticResource PanelMuted}" FontSize="11.5" TextWrapping="Wrap" />
+              </StackPanel>
+            </RadioButton>
+
+            <RadioButton x:Name="GoogleEngineOption" GroupName="Engine"
+                         Checked="OnEngineChanged" Margin="0,0,0,6">
+              <StackPanel>
+                <TextBlock Text="Google แปลภาษา" FontWeight="SemiBold" />
+                <TextBlock Text="เร็วบนเครื่องสเปกต่ำ เพราะไม่ได้ประมวลผลที่เครื่องเรา — แต่ข้อความในเกมจะถูกส่งไปที่ Google"
+                           Foreground="{StaticResource PanelMuted}" FontSize="11.5" TextWrapping="Wrap" />
+              </StackPanel>
+            </RadioButton>
+
+            <StackPanel x:Name="GooglePanel" Visibility="Collapsed" Margin="24,2,0,8">
+              <TextBlock Text="Cloud Translation API key (ไม่ใส่ก็ได้)"
+                         Foreground="{StaticResource PanelMuted}" FontSize="11.5" Margin="0,0,0,4" />
+              <PasswordBox x:Name="GoogleKeyBox" Padding="8,6" PasswordChanged="OnSecretChanged" />
+              <TextBlock Text="ไม่ใส่คีย์ = ใช้บริการฟรี ไม่ต้องสมัครอะไร แต่เป็นช่องทางที่ไม่เป็นทางการ อาจถูกจำกัดจำนวนคำขอหรือปิดเมื่อไรก็ได้"
+                         Foreground="{StaticResource PanelMuted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0" />
+            </StackPanel>
+
+            <RadioButton x:Name="OpenAiEngineOption" GroupName="Engine"
+                         Checked="OnEngineChanged" Margin="0,0,0,6">
+              <StackPanel>
+                <TextBlock Text="OpenAI / ChatGPT (ใช้ API key)" FontWeight="SemiBold" />
+                <TextBlock Text="ภาษาไทยเป็นธรรมชาติที่สุดในสามแบบ คิดเงินตามจำนวนที่แปล และข้อความในเกมจะถูกส่งออกนอกเครื่อง"
+                           Foreground="{StaticResource PanelMuted}" FontSize="11.5" TextWrapping="Wrap" />
+              </StackPanel>
+            </RadioButton>
+
+            <StackPanel x:Name="OpenAiPanel" Visibility="Collapsed" Margin="24,2,0,0">
+              <TextBlock Text="API key" Foreground="{StaticResource PanelMuted}" FontSize="11.5" Margin="0,0,0,4" />
+              <PasswordBox x:Name="OpenAiKeyBox" Padding="8,6" PasswordChanged="OnSecretChanged" />
+
+              <TextBlock Text="โมเดล" Foreground="{StaticResource PanelMuted}" FontSize="11.5" Margin="0,8,0,4" />
+              <TextBox x:Name="OpenAiModelBox" Padding="8,6" FontFamily="{StaticResource MonoFont}"
+                       FontSize="11.5" TextChanged="OnSecretTextChanged" />
+
+              <TextBlock Text="ปลายทาง (เปลี่ยนได้ถ้าใช้ OpenRouter, Groq หรือเซิร์ฟเวอร์ของตัวเอง)"
+                         Foreground="{StaticResource PanelMuted}" FontSize="11.5" Margin="0,8,0,4" />
+              <TextBox x:Name="OpenAiBaseUrlBox" Padding="8,6" FontFamily="{StaticResource MonoFont}"
+                       FontSize="11.5" TextChanged="OnSecretTextChanged" />
+            </StackPanel>
+
+            <WrapPanel x:Name="CloudTestPanel" Visibility="Collapsed" Margin="0,10,0,0">
+              <Button x:Name="TestCloudButton" Style="{StaticResource SmallButton}"
+                      Content="ทดสอบการแปล" Click="OnTestCloudClick" Margin="0,0,10,0" />
+              <TextBlock x:Name="CloudTestResult" VerticalAlignment="Center" TextWrapping="Wrap"
+                         FontSize="11.5" Foreground="{StaticResource PanelMuted}" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+
+        <StackPanel x:Name="LocalModelSection">
+                <!-- Where the two big files go. First, because it decides where the rest lands. -->
         <Border Style="{StaticResource Card}" Margin="0,0,0,10">
           <Grid>
             <Grid.ColumnDefinitions>
@@ -189,9 +257,10 @@
                      Background="{StaticResource CodeBackground}" Foreground="{StaticResource PanelForeground}"
                      FontFamily="{StaticResource MonoFont}" FontSize="11" Padding="8"
                      MaxHeight="120" VerticalScrollBarVisibility="Auto" />
-      </StackPanel>
-    </Expander>
+          </StackPanel>
+        </Expander>
 
+        </StackPanel>
       </StackPanel>
     </ScrollViewer>
 

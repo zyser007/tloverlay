@@ -1,9 +1,13 @@
 namespace TLOverlay.Core.Translation;
 
 /// <summary>
-/// A source-to-target translator. Every implementation in this app runs
-/// entirely on the local machine; nothing here is allowed to reach the network
-/// beyond loopback.
+/// A source-to-target translator.
+///
+/// Implementations are either local - a model on this machine, reachable only
+/// over loopback - or hosted, in which case the text being translated leaves the
+/// machine. Which one is running is the player's choice and is stated plainly
+/// where they make it, because on a PC that cannot hold a model at all the
+/// alternative to sending text away is not translating at anything.
 /// </summary>
 public interface ITranslator : IAsyncDisposable
 {

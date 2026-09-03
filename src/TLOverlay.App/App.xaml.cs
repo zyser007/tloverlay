@@ -74,7 +74,7 @@ public partial class App : Application
 
         var settings = SettingsStore.Load(DataDirectory);
 
-        if (!TranslatorFactory.IsModelInstalled(settings.Translator, settings.InstallRoot))
+        if (!TranslatorFactory.IsReadyToTranslate(settings.Translator, settings.InstallRoot))
         {
             new SetupWindow(settings).ShowDialog();
         }

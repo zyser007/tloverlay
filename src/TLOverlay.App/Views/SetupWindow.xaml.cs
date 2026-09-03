@@ -6,6 +6,7 @@ using Microsoft.Win32;
 using Serilog;
 using TLOverlay.App.Services;
 using TLOverlay.Core.Setup;
+using TLOverlay.Core.Translation;
 
 namespace TLOverlay.App.Views;
 
@@ -26,6 +27,13 @@ public partial class SetupWindow : Window
 
     private CancellationTokenSource? _download;
     private bool _busy;
+
+    /// <summary>
+    /// True while the stored choice is being put on screen. Setting IsChecked
+    /// raises Checked, and without this the load would immediately write back
+    /// what it just read.
+    /// </summary>
+    private bool _loadingEngine;
 
     public SetupWindow(AppSettings settings)
     {
@@ -54,6 +62,8 @@ public partial class SetupWindow : Window
 
         GpuOption.IsChecked = _settings.Translator.GpuLayers > 0;
         CpuOption.IsChecked = !GpuOption.IsChecked;
+
+        LoadEngineChoice();
 
         Closed += (_, _) => _http.Dispose();
 
@@ -107,7 +117,13 @@ public partial class SetupWindow : Window
         ModelGlyph.Foreground = Swatch(hasModel);
         ModelPath.Text = hasModel ? ModelTarget : $"ยังไม่มีไฟล์ — จะบันทึกไว้ที่ {ModelTarget}";
 
-        DoneButton.IsEnabled = hasServer && hasModel && !_busy;
+        bool localReady = hasServer && hasModel;
+
+        // A cloud engine has no files to wait for, so the way out of this screen
+        // must not be gated on a model the player deliberately did not download.
+        DoneButton.IsEnabled = !_busy && (Backend == TranslationBackend.Local
+            ? localReady
+            : TranslatorFactory.IsReadyToTranslate(_settings.Translator, _settings.InstallRoot));
         ServerDownloadButton.IsEnabled = !_busy;
         ModelDownloadButton.IsEnabled = !_busy && SelectedModel is not null;
 
@@ -168,6 +184,155 @@ public partial class SetupWindow : Window
         ModelRamText.Text = machine < model.ApproximateRamBytes + Headroom
             ? $"{needs} — เครื่องนี้มีแรม {MemoryReadout.Format(machine)} อาจไม่พอเมื่อเปิดเกมพร้อมกัน ลองเลือกรุ่นเล็กลง"
             : $"{needs} · เครื่องนี้มีแรม {MemoryReadout.Format(machine)}";
+    }
+
+    private TranslationBackend Backend =>
+        GoogleEngineOption.IsChecked == true ? TranslationBackend.Google
+        : OpenAiEngineOption.IsChecked == true ? TranslationBackend.OpenAi
+        : TranslationBackend.Local;
+
+    /// <summary>
+    /// Puts the stored choice on screen. Keys come back decrypted so the boxes
+    /// can be pre-filled - a player who opens this screen to change a model
+    /// should not have to paste their key again to keep it.
+    /// </summary>
+    private void LoadEngineChoice()
+    {
+        _loadingEngine = true;
+
+        try
+        {
+            LoadEngineChoiceCore();
+        }
+        finally
+        {
+            _loadingEngine = false;
+        }
+
+        ApplyEngineVisibility();
+    }
+
+    private void LoadEngineChoiceCore()
+    {
+        LocalEngineOption.IsChecked = _settings.Translator.Backend == TranslationBackend.Local;
+        GoogleEngineOption.IsChecked = _settings.Translator.Backend == TranslationBackend.Google;
+        OpenAiEngineOption.IsChecked = _settings.Translator.Backend == TranslationBackend.OpenAi;
+
+        GoogleKeyBox.Password = SecretStore.Unprotect(_settings.Translator.GoogleApiKeyProtected) ?? string.Empty;
+        OpenAiKeyBox.Password = SecretStore.Unprotect(_settings.Translator.OpenAiApiKeyProtected) ?? string.Empty;
+        OpenAiModelBox.Text = _settings.Translator.OpenAiModel;
+        OpenAiBaseUrlBox.Text = _settings.Translator.OpenAiBaseUrl;
+    }
+
+    private void ApplyEngineVisibility()
+    {
+        TranslationBackend backend = Backend;
+
+        GooglePanel.Visibility = backend == TranslationBackend.Google ? Visibility.Visible : Visibility.Collapsed;
+        OpenAiPanel.Visibility = backend == TranslationBackend.OpenAi ? Visibility.Visible : Visibility.Collapsed;
+        CloudTestPanel.Visibility = backend == TranslationBackend.Local ? Visibility.Collapsed : Visibility.Visible;
+
+        // The download rows stay visible for the local engine only. Leaving them
+        // on screen for a cloud engine would invite a two-gigabyte download that
+        // nothing is going to use.
+        LocalModelSection.Visibility = backend == TranslationBackend.Local ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnEngineChanged(object sender, RoutedEventArgs e)
+    {
+        // Checked fires during InitializeComponent, before the panels it shows
+        // and hides have been created.
+        if (_loadingEngine || GooglePanel is null || LocalModelSection is null)
+        {
+            return;
+        }
+
+        ApplyEngineVisibility();
+        SaveEngineChoice();
+    }
+
+    private void OnSecretChanged(object sender, RoutedEventArgs e) => SaveIfReady();
+
+    private void OnSecretTextChanged(object sender, TextChangedEventArgs e) => SaveIfReady();
+
+    private void SaveIfReady()
+    {
+        if (!_loadingEngine && OpenAiModelBox is not null && OpenAiBaseUrlBox is not null)
+        {
+            SaveEngineChoice();
+        }
+    }
+
+    private void SaveEngineChoice()
+    {
+        _settings.Translator.Backend = Backend;
+        _settings.Translator.GoogleApiKeyProtected = SecretStore.Protect(GoogleKeyBox.Password);
+        _settings.Translator.OpenAiApiKeyProtected = SecretStore.Protect(OpenAiKeyBox.Password);
+        _settings.Translator.OpenAiModel = string.IsNullOrWhiteSpace(OpenAiModelBox.Text)
+            ? "gpt-4o-mini"
+            : OpenAiModelBox.Text.Trim();
+        _settings.Translator.OpenAiBaseUrl = string.IsNullOrWhiteSpace(OpenAiBaseUrlBox.Text)
+            ? "https://api.openai.com/v1/"
+            : OpenAiBaseUrlBox.Text.Trim();
+
+        SaveSettings();
+        RefreshState();
+    }
+
+    /// <summary>
+    /// Translates one sentence and shows the result.
+    ///
+    /// The single most useful control on this screen for a cloud engine: a wrong
+    /// key, a wrong model name or a blocked network otherwise shows up much later
+    /// as an overlay that silently never says anything, in the middle of a game.
+    /// </summary>
+    private async void OnTestCloudClick(object sender, RoutedEventArgs e)
+    {
+        const string Sample = "The gate will not open until the seal is broken.";
+
+        SaveEngineChoice();
+
+        TestCloudButton.IsEnabled = false;
+        CloudTestResult.Text = "กำลังทดสอบ…";
+
+        try
+        {
+            await using ITranslator translator = Backend == TranslationBackend.Google
+                ? new GoogleTranslateTranslator(SecretStore.Unprotect(_settings.Translator.GoogleApiKeyProtected), client: _http)
+                : new OpenAiTranslator(
+                    new OpenAiOptions
+                    {
+                        ApiKey = SecretStore.Unprotect(_settings.Translator.OpenAiApiKeyProtected) ?? string.Empty,
+                        Model = _settings.Translator.OpenAiModel,
+                        BaseAddress = TranslatorFactory.ParseBaseAddress(_settings.Translator.OpenAiBaseUrl),
+                    },
+                    client: _http);
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            string thai = await translator.TranslateAsync(Sample, timeout.Token);
+
+            CloudTestResult.Text = string.IsNullOrWhiteSpace(thai)
+                ? "เชื่อมต่อได้ แต่ไม่มีข้อความแปลกลับมา"
+                : $"ได้ผลแล้ว: {thai}";
+        }
+        catch (OperationCanceledException)
+        {
+            CloudTestResult.Text = "หมดเวลารอ — ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต";
+        }
+        catch (Exception ex) when (ex is CloudTranslationException or HttpRequestException)
+        {
+            Log.Warning(ex, "Cloud translation test failed.");
+            CloudTestResult.Text = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Cloud translation test failed unexpectedly.");
+            CloudTestResult.Text = $"ผิดพลาด ({ex.GetType().Name}): {ex.Message}";
+        }
+        finally
+        {
+            TestCloudButton.IsEnabled = true;
+        }
     }
 
     /// <summary>Green for present, amber for missing, both readable on the light surface.</summary>

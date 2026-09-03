@@ -79,9 +79,11 @@ public sealed class TranslationSession : IAsyncDisposable
             return;
         }
 
-        if (!TranslatorFactory.IsModelInstalled(_settings, _installRoot))
+        if (!TranslatorFactory.IsReadyToTranslate(_settings, _installRoot))
         {
-            Report("ยังไม่มีโมเดลแปลภาษา — กดปุ่ม “ตั้งค่าโมเดล” เพื่อดาวน์โหลด");
+            Report(_settings.Backend == TLOverlay.Core.Translation.TranslationBackend.OpenAi
+                ? "ยังไม่ได้ใส่ API key — กดปุ่ม “ตั้งค่าโมเดล” เพื่อใส่"
+                : "ยังไม่มีโมเดลแปลภาษา — กดปุ่ม “ตั้งค่าโมเดล” เพื่อดาวน์โหลด");
             return;
         }
 
