@@ -160,7 +160,15 @@ public class OpenAiTranslatorTests
     [Fact]
     public async Task TheKeyModelAndPromptAllGoOut()
     {
-        var handler = new StubHttpMessageHandler(_ => Reply("ประตูจะไม่เปิด"));
+        // Read inside the responder: the translator disposes the request, and
+        // with it the content, as soon as the call returns.
+        string sent = string.Empty;
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            sent = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Reply("ประตูจะไม่เปิด");
+        });
 
         await using var translator = new OpenAiTranslator(
             new OpenAiOptions { ApiKey = "sk-test", Model = "gpt-4o-mini" },
@@ -168,15 +176,15 @@ public class OpenAiTranslatorTests
 
         Assert.Equal("ประตูจะไม่เปิด", await translator.TranslateAsync("The gate will not open."));
 
-        HttpRequestMessage request = handler.Requests[0];
+        HttpRequestMessage issued = handler.Requests[0];
 
-        Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
-        Assert.Equal("sk-test", request.Headers.Authorization?.Parameter);
-        Assert.Equal("https://api.openai.com/v1/chat/completions", request.RequestUri!.ToString());
+        Assert.Equal("Bearer", issued.Headers.Authorization?.Scheme);
+        Assert.Equal("sk-test", issued.Headers.Authorization?.Parameter);
+        Assert.Equal("https://api.openai.com/v1/chat/completions", issued.RequestUri!.ToString());
 
-        string body = await request.Content!.ReadAsStringAsync();
-        Assert.Contains("gpt-4o-mini", body, StringComparison.Ordinal);
-        Assert.Contains("translation engine", body, StringComparison.Ordinal);
+        Assert.Contains("gpt-4o-mini", sent, StringComparison.Ordinal);
+        Assert.Contains("translation engine", sent, StringComparison.Ordinal);
+        Assert.Contains("The gate will not open.", sent, StringComparison.Ordinal);
     }
 
     [Fact]
