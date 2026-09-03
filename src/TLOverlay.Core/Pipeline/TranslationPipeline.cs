@@ -36,6 +36,13 @@ public sealed class TranslationPipeline : IAsyncDisposable
     /// </summary>
     private const double SameTextThreshold = 0.93;
 
+    /// <summary>
+    /// How often the loop checks that capture is still alive while the player is
+    /// in an on-demand mode. Half a second is soon enough to notice a game
+    /// closing and costs nothing at all.
+    /// </summary>
+    private const int IdlePollIntervalMilliseconds = 500;
+
     private readonly ICaptureSource _capture;
     private readonly IOcrEngine _ocr;
     private readonly ITranslator _translator;
@@ -186,6 +193,20 @@ public sealed class TranslationPipeline : IAsyncDisposable
         {
             try
             {
+                // On demand, the loop's only remaining job is to notice the game
+                // closing - and it can see that without pulling an eight-megabyte
+                // frame several times a second that nothing is going to read.
+                if (Mode != TranslationMode.Automatic)
+                {
+                    if (!_capture.IsRunning)
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(IdlePollIntervalMilliseconds, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
                 stopwatch.Restart();
 
                 // Disposed at the end of every iteration: the frame's buffer goes

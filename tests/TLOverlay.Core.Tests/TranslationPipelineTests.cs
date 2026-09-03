@@ -33,10 +33,12 @@ public class TranslationPipelineTests
 
         await pipeline.StartAsync(new IntPtr(1), Profile());
 
-        // Several poll intervals worth of frames, none of which may be read.
-        await capture.ServeAsync(5);
+        // Several poll intervals. On demand the loop does not even grab, so this
+        // waits on the clock rather than on frames that will never be asked for.
+        await Task.Delay(120);
 
         Assert.Equal(0, translator.CallCount);
+        Assert.Equal(0, capture.Issued);
     }
 
     [Fact]
@@ -230,6 +232,8 @@ public class TranslationPipelineTests
 
         // The frame is eight megabytes at 1080p and translation can take tens of
         // seconds; holding it for all of that is exactly the leak this app had.
+        // Deterministic because the loop does not grab in this mode: the only
+        // frame in play is the sweep's own.
         int outstandingWhileTranslating = -1;
         translator.WhileTranslating = () => outstandingWhileTranslating = capture.Outstanding;
 
@@ -264,10 +268,13 @@ public class TranslationPipelineTests
         };
 
         await pipeline.StartAsync(new IntPtr(1), Profile());
-        await capture.ServeAsync(6);
+        await Task.Delay(120);
 
         Assert.Equal(0, translator.CallCount);
         Assert.Equal(0, translator.BatchCallCount);
+
+        // And it does not pull frames it has no intention of reading.
+        Assert.Equal(0, capture.Issued);
     }
 
     [Fact]
