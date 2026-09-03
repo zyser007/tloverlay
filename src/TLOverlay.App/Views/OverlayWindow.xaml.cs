@@ -213,9 +213,12 @@ public partial class OverlayWindow : Window
         // drops the lot without disturbing the panel or the region outline.
         _screenLayer = new Canvas { IsHitTestVisible = false };
 
+        // Above the panel, not below it: a full-screen label has to cover the
+        // English it replaces, and a leftover subtitle panel painting over the
+        // labels is what that ordering produced.
         Surface.Children.Add(_outline);
-        Surface.Children.Add(_screenLayer);
         Surface.Children.Add(_panel);
+        Surface.Children.Add(_screenLayer);
         Surface.Children.Add(_modeBadge);
         Surface.Children.Add(_busyBadge);
     }
@@ -394,13 +397,12 @@ public partial class OverlayWindow : Window
         _screenLines = translation.Lines;
 
         // The two presentations are alternatives, not layers: showing both means
-        // the same line translated in two places.
-        if (_clickThrough)
-        {
-            _hasText = false;
-            _text.Text = string.Empty;
-            _panel.Visibility = Visibility.Collapsed;
-        }
+        // the same line translated in two places. Whether the player can click
+        // through the overlay has nothing to do with that, so this is not
+        // conditional on it.
+        _hasText = false;
+        _text.Text = string.Empty;
+        _panel.Visibility = Visibility.Collapsed;
 
         LayoutScreenLabels();
     }

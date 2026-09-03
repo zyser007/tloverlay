@@ -277,6 +277,101 @@ public class TranslationPipelineTests
         Assert.Equal(0, capture.Issued);
     }
 
+    /// <summary>
+    /// The gap the whole feature fell through. Every other full-screen test calls
+    /// TranslateScreenAsync directly; nothing exercised the method the button and
+    /// the hotkey actually reach, and that method ignored the mode entirely - so
+    /// pressing translate in full-screen mode ran the region pass, glued every
+    /// line the crop found into one string, and drew it in the subtitle panel.
+    /// </summary>
+    [Fact]
+    public async Task PressingTranslateOnceInFullScreenModeSweepsTheScreen()
+    {
+        var capture = new FakeCaptureSource();
+        var translator = new FakeBatchTranslator();
+        ScreenTranslation? screen = null;
+        RegionTranslation? region = null;
+
+        await using var pipeline = new TranslationPipeline(
+            capture,
+            new FakeOcrEngine(
+            [
+                OcrLine.FromText("Critical Rate", new TextRect(0, 0, 160, 30)),
+                OcrLine.FromText("Max Stamina", new TextRect(0, 40, 160, 30)),
+            ]),
+            translator)
+        {
+            Mode = TranslationMode.OnDemandFullScreen,
+        };
+
+        pipeline.ScreenTranslationReady += (_, value) => screen = value;
+        pipeline.TranslationReady += (_, value) => region = value;
+
+        await pipeline.StartAsync(new IntPtr(1), Profile());
+        await pipeline.TranslateOnceAsync();
+
+        Assert.NotNull(screen);
+        Assert.Equal(2, screen.Lines.Count);
+        Assert.Equal("TH:Critical Rate", screen.Lines[0].TranslatedText);
+
+        // And emphatically not through the panel: one box of "Critical Rate Max
+        // Stamina" is the bug, not a lesser version of the right answer.
+        Assert.Null(region);
+    }
+
+    [Fact]
+    public async Task TheBusyFlagIsRaisedThroughTranslateOnceToo()
+    {
+        var capture = new FakeCaptureSource();
+        var states = new List<bool>();
+
+        await using var pipeline = new TranslationPipeline(
+            capture,
+            new FakeOcrEngine([OcrLine.FromText("Start Game", new TextRect(0, 0, 160, 30))]),
+            new FakeBatchTranslator())
+        {
+            Mode = TranslationMode.OnDemandFullScreen,
+        };
+
+        pipeline.ScreenPassBusy += (_, busy) => states.Add(busy);
+
+        await pipeline.StartAsync(new IntPtr(1), Profile());
+        await pipeline.TranslateOnceAsync();
+
+        Assert.Equal([true, false], states);
+    }
+
+    [Theory]
+    [InlineData(TranslationMode.OnDemandRegion)]
+    [InlineData(TranslationMode.Automatic)]
+    public async Task PressingTranslateOnceInTheOtherModesStillTranslatesTheRegion(TranslationMode mode)
+    {
+        var capture = new FakeCaptureSource();
+        RegionTranslation? region = null;
+        ScreenTranslation? screen = null;
+
+        await using var pipeline = new TranslationPipeline(
+            capture,
+            new FakeOcrEngine("The gate will not open."),
+            new FakeTranslator())
+        {
+            Mode = mode,
+        };
+
+        pipeline.TranslationReady += (_, value) => region = value;
+        pipeline.ScreenTranslationReady += (_, value) => screen = value;
+
+        await pipeline.StartAsync(new IntPtr(1), Profile());
+        await pipeline.TranslateOnceAsync();
+
+        Assert.NotNull(region);
+        Assert.Equal("TH:The gate will not open.", region.TranslatedText);
+
+        // Asking for one translation while automatic is running means the region
+        // again, right now - not the whole screen at cloud-engine prices.
+        Assert.Null(screen);
+    }
+
     [Fact]
     public async Task TheBusyFlagBracketsAFullScreenPass()
     {

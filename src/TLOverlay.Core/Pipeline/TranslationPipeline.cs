@@ -271,6 +271,15 @@ public sealed class TranslationPipeline : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
+        // The mode decides here, not at the call site: "translate once" in
+        // full-screen mode means the whole screen, and every way of asking for it
+        // - the button, the hotkey - arrives through this one method.
+        if (Mode == TranslationMode.OnDemandFullScreen)
+        {
+            await TranslateScreenAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         using CapturedFrame? frame = await GrabAsync(cancellationToken).ConfigureAwait(false);
 
         if (frame is null)
