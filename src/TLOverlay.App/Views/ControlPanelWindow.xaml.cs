@@ -9,6 +9,7 @@ using Serilog;
 using TLOverlay.App.Interop;
 using TLOverlay.App.Services;
 using TLOverlay.Core.Capture;
+using TLOverlay.Core.Pipeline;
 using TLOverlay.Core.Profiles;
 using TLOverlay.Core.Setup;
 using TLOverlay.Core.Translation;
