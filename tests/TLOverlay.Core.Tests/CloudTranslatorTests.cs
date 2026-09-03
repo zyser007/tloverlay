@@ -139,14 +139,23 @@ public class GoogleTranslateTranslatorTests
 
 public class OpenAiTranslatorTests
 {
-    private static HttpResponseMessage Reply(string content) =>
-        new(HttpStatusCode.OK)
+    private static HttpResponseMessage Reply(string content)
+    {
+        // Built rather than interpolated: a raw string literal holding this many
+        // consecutive closing braces needs more dollar signs than it is worth.
+        string body = System.Text.Json.JsonSerializer.Serialize(new
         {
-            Content = new StringContent(
-                $$"""{"choices":[{"message":{"role":"assistant","content":{{System.Text.Json.JsonSerializer.Serialize(content)}}}}]}""",
-                Encoding.UTF8,
-                "application/json"),
+            choices = new[]
+            {
+                new { message = new { role = "assistant", content } },
+            },
+        });
+
+        return new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
         };
+    }
 
     [Fact]
     public async Task TheKeyModelAndPromptAllGoOut()

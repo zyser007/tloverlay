@@ -121,7 +121,7 @@ public partial class SetupWindow : Window
 
         // A cloud engine has no files to wait for, so the way out of this screen
         // must not be gated on a model the player deliberately did not download.
-        DoneButton.IsEnabled = !_busy && (Backend == TranslationBackend.Local
+        DoneButton.IsEnabled = !_busy && (SelectedEngine == TranslationBackend.Local
             ? localReady
             : TranslatorFactory.IsReadyToTranslate(_settings.Translator, _settings.InstallRoot));
         ServerDownloadButton.IsEnabled = !_busy;
@@ -186,7 +186,11 @@ public partial class SetupWindow : Window
             : $"{needs} · เครื่องนี้มีแรม {MemoryReadout.Format(machine)}";
     }
 
-    private TranslationBackend Backend =>
+    /// <summary>
+    /// The engine the radio buttons are on. Named for the engine rather than
+    /// "backend", which in this window already means CPU-versus-CUDA.
+    /// </summary>
+    private TranslationBackend SelectedEngine =>
         GoogleEngineOption.IsChecked == true ? TranslationBackend.Google
         : OpenAiEngineOption.IsChecked == true ? TranslationBackend.OpenAi
         : TranslationBackend.Local;
@@ -226,7 +230,7 @@ public partial class SetupWindow : Window
 
     private void ApplyEngineVisibility()
     {
-        TranslationBackend backend = Backend;
+        TranslationBackend backend = SelectedEngine;
 
         GooglePanel.Visibility = backend == TranslationBackend.Google ? Visibility.Visible : Visibility.Collapsed;
         OpenAiPanel.Visibility = backend == TranslationBackend.OpenAi ? Visibility.Visible : Visibility.Collapsed;
@@ -265,7 +269,7 @@ public partial class SetupWindow : Window
 
     private void SaveEngineChoice()
     {
-        _settings.Translator.Backend = Backend;
+        _settings.Translator.Backend = SelectedEngine;
         _settings.Translator.GoogleApiKeyProtected = SecretStore.Protect(GoogleKeyBox.Password);
         _settings.Translator.OpenAiApiKeyProtected = SecretStore.Protect(OpenAiKeyBox.Password);
         _settings.Translator.OpenAiModel = string.IsNullOrWhiteSpace(OpenAiModelBox.Text)
@@ -297,7 +301,7 @@ public partial class SetupWindow : Window
 
         try
         {
-            await using ITranslator translator = Backend == TranslationBackend.Google
+            await using ITranslator translator = SelectedEngine == TranslationBackend.Google
                 ? new GoogleTranslateTranslator(SecretStore.Unprotect(_settings.Translator.GoogleApiKeyProtected), client: _http)
                 : new OpenAiTranslator(
                     new OpenAiOptions
