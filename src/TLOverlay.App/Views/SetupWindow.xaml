@@ -168,7 +168,11 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal">
               <Button x:Name="ServerDownloadButton" Style="{StaticResource SmallButton}"
                       Content="ดาวน์โหลด" Click="OnDownloadServerClick" Margin="0,0,8,0" />
-              <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…" Click="OnBrowseServerClick" />
+              <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…"
+                      Click="OnBrowseServerClick" Margin="0,0,8,0" />
+              <Button x:Name="ServerDeleteButton" Style="{StaticResource SmallButton}"
+                      Content="ลบ" Click="OnDeleteServerClick"
+                      ToolTip="ลบเซิร์ฟเวอร์ที่ติดตั้งไว้ เพื่อคืนพื้นที่" />
             </StackPanel>
           </Grid>
         </Border>
@@ -192,7 +196,11 @@
             <StackPanel Grid.Column="2" Orientation="Horizontal">
               <Button x:Name="ModelDownloadButton" Style="{StaticResource SmallButton}"
                       Content="ดาวน์โหลด" Click="OnDownloadModelClick" Margin="0,0,8,0" />
-              <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…" Click="OnBrowseModelClick" />
+              <Button Style="{StaticResource SmallButton}" Content="เลือกไฟล์เอง…"
+                      Click="OnBrowseModelClick" Margin="0,0,8,0" />
+              <Button x:Name="ModelDeleteButton" Style="{StaticResource SmallButton}"
+                      Content="ลบ" Click="OnDeleteModelClick"
+                      ToolTip="ลบโมเดลที่ติดตั้งไว้ เพื่อคืนพื้นที่" />
             </StackPanel>
           </Grid>
         </Border>

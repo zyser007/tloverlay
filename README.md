@@ -166,6 +166,14 @@ model or move the work between CPU and GPU.
 If you would rather script it, `tools/fetch-models.ps1` does the same job, but
 it needs PowerShell 7 (`pwsh`), which Windows does not ship by default.
 
+Both rows have a **ลบ** button. The model is the largest thing this app puts on
+a disk by two orders of magnitude, and a player who has moved to a cloud engine -
+or who just needs the space back for a game - should not have to go hunting
+through `%LocalAppData%` for it. Deleting the model takes any half-finished
+download with it; deleting the server takes the whole `runtime` folder, since the
+executable does not run without the DLLs beside it. A server pointed somewhere
+else by hand loses only its executable - that folder is the player's.
+
 ### Where they are installed
 
 The server and the model together are several gigabytes, so the setup screen lets

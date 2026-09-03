@@ -127,6 +127,11 @@ public partial class SetupWindow : Window
         ServerDownloadButton.IsEnabled = !_busy;
         ModelDownloadButton.IsEnabled = !_busy && SelectedModel is not null;
 
+        // Nothing to delete is not the same as being unable to: the button is
+        // there either way, and simply has nothing to act on.
+        ServerDeleteButton.IsEnabled = !_busy && hasServer;
+        ModelDeleteButton.IsEnabled = !_busy && hasModel;
+
         InstallPathText.Text = InstallRoot;
 
         long? free = InstallLocation.FreeSpaceBytes(InstallRoot);
@@ -590,6 +595,89 @@ public partial class SetupWindow : Window
         };
 
         return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    /// <summary>
+    /// Deletes the downloaded model.
+    ///
+    /// The largest thing this app puts on a disk by two orders of magnitude, and
+    /// the first thing to go for a player who has moved to a cloud engine or who
+    /// needs the space back for a game.
+    /// </summary>
+    private void OnDeleteModelClick(object sender, RoutedEventArgs e)
+    {
+        string target = ModelTarget;
+
+        if (!Confirm("โมเดลแปลภาษา", target, InstallCleaner.ModelSize(target)))
+        {
+            return;
+        }
+
+        try
+        {
+            InstallCleaner.DeleteModel(target);
+
+            // A path the player chose with Browse is now a path to nothing.
+            _settings.Translator.ModelPath = null;
+
+            SaveSettings();
+            Status("ลบโมเดลแล้ว");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ReportDeleteFailure(ex);
+        }
+
+        RefreshState();
+    }
+
+    private void OnDeleteServerClick(object sender, RoutedEventArgs e)
+    {
+        string target = ServerTarget;
+
+        if (!Confirm("เซิร์ฟเวอร์แปลภาษา", target, InstallCleaner.RuntimeSize(target, InstallRoot)))
+        {
+            return;
+        }
+
+        try
+        {
+            InstallCleaner.DeleteRuntime(target, InstallRoot);
+            _settings.Translator.ExecutablePath = null;
+
+            SaveSettings();
+            Status("ลบเซิร์ฟเวอร์แล้ว");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ReportDeleteFailure(ex);
+        }
+
+        RefreshState();
+    }
+
+    /// <summary>
+    /// Asks before deleting, with the size, because this is not undoable and
+    /// getting it back means downloading it again.
+    /// </summary>
+    private static bool Confirm(string what, string path, long bytes)
+    {
+        string size = bytes > 0
+            ? $"\n\nคืนพื้นที่ได้ {FormatBytes(bytes)}"
+            : string.Empty;
+
+        return MessageBox.Show(
+            $"ลบ{what}ที่ติดตั้งไว้?\n{path}{size}\n\nถ้าจะใช้อีกต้องดาวน์โหลดใหม่",
+            "TLOverlay",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    }
+
+    private void ReportDeleteFailure(Exception ex)
+    {
+        // Almost always the server still running and holding its own files open.
+        Log.Warning(ex, "Could not delete an installed file.");
+        Status($"ลบไม่สำเร็จ: {ex.Message} — ถ้ากำลังแปลอยู่ ให้กดหยุดแปลก่อน");
     }
 
     /// <summary>
