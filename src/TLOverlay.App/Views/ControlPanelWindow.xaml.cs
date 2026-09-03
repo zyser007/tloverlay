@@ -38,9 +38,37 @@ public partial class ControlPanelWindow : Window
     private readonly ProfileStore _profiles = new(AppPaths.ProfilesDirectory);
     private readonly AppSettings _settings = SettingsStore.Load(App.DataDirectory);
     private readonly GlobalHotKeyService _hotKeys = new();
-    private readonly DispatcherTimer _metricsTimer;
-    private readonly DispatcherTimer _opacitySaveTimer;
+
+    // Constructed here rather than in the constructor body, because the body does
+    // not run until InitializeComponent has finished - and XAML raises events
+    // during InitializeComponent that reach handlers using these.
+    private readonly DispatcherTimer _metricsTimer = new(DispatcherPriority.Background)
+    {
+        Interval = TimeSpan.FromSeconds(1),
+    };
+
+    private readonly DispatcherTimer _opacitySaveTimer = new(DispatcherPriority.Background)
+    {
+        Interval = TimeSpan.FromMilliseconds(400),
+    };
+
     private readonly UpdateService _updates;
+
+    /// <summary>
+    /// False until the constructor has finished. XAML raises Checked and
+    /// ValueChanged while InitializeComponent is still running, when every field
+    /// the constructor body assigns is still null - so handlers wired from XAML
+    /// wait for this instead of testing whichever control they happen to touch.
+    /// Which controls are non-null at that point depends only on where they sit
+    /// in the XAML file, which is not a rule anyone can follow while editing it.
+    /// </summary>
+    private bool _ready;
+
+    /// <summary>
+    /// Set while code, rather than the player, is writing into a control - so
+    /// loading a profile into the panel does not save it straight back.
+    /// </summary>
+    private bool _loading;
 
     private TranslationSession? _session;
     private GameProfile _profile = GameProfile.CreateDefault("Default");
@@ -66,17 +94,9 @@ public partial class ControlPanelWindow : Window
         UpdateMouseModeHint();
         UpdateTranslateModeHint();
 
-        _metricsTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromSeconds(1),
-        };
         _metricsTimer.Tick += (_, _) => UpdateMetrics();
         _metricsTimer.Start();
 
-        _opacitySaveTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(400),
-        };
         _opacitySaveTimer.Tick += (_, _) =>
         {
             _opacitySaveTimer.Stop();
@@ -101,6 +121,10 @@ public partial class ControlPanelWindow : Window
                 "คีย์ลัดบางตัวถูกโปรแกรมอื่นใช้อยู่: " +
                 string.Join(", ", failed.Select(static f => f.Gesture));
         }
+
+        // Last, and it must stay last: everything above is what the handlers
+        // gated on it expect to exist.
+        _ready = true;
     }
 
     public ObservableCollection<GameWindow> Windows { get; } = [];
@@ -179,6 +203,11 @@ public partial class ControlPanelWindow : Window
 
     private void OnWindowSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_ready)
+        {
+            return;
+        }
+
         var selected = SelectedWindow;
 
         EditRegionButton.IsEnabled = selected is not null;
@@ -200,7 +229,17 @@ public partial class ControlPanelWindow : Window
 
         // The opacity is per game, so the slider follows the profile that was
         // just loaded rather than keeping the last game's value.
-        ScreenOpacitySlider.Value = Math.Clamp(_profile.ScreenOverlayOpacity, ScreenOpacitySlider.Minimum, 1.0);
+        _loading = true;
+
+        try
+        {
+            ScreenOpacitySlider.Value = Math.Clamp(_profile.ScreenOverlayOpacity, ScreenOpacitySlider.Minimum, 1.0);
+        }
+        finally
+        {
+            _loading = false;
+        }
+
         UpdateScreenOpacityLabel();
 
         // Exclusive fullscreen is the most common reason capture comes back
@@ -383,6 +422,11 @@ public partial class ControlPanelWindow : Window
     /// </summary>
     private void OnLayerToggled(object sender, RoutedEventArgs e)
     {
+        if (!_ready)
+        {
+            return;
+        }
+
         _session?.SetTranslationsVisible(ShowTranslationsToggle.IsChecked == true);
         _session?.SetRegionVisible(ShowRegionToggle.IsChecked == true);
     }
@@ -394,8 +438,7 @@ public partial class ControlPanelWindow : Window
 
     private void OnTranslateModeChanged(object sender, RoutedEventArgs e)
     {
-        // Fires during InitializeComponent, before the hint exists.
-        if (TranslateModeHint is null || ScreenOpacityPanel is null)
+        if (!_ready)
         {
             return;
         }
@@ -466,7 +509,7 @@ public partial class ControlPanelWindow : Window
 
     private void OnScreenOpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (ScreenOpacityLabel is null)
+        if (!_ready)
         {
             return;
         }
@@ -474,6 +517,13 @@ public partial class ControlPanelWindow : Window
         _profile.ScreenOverlayOpacity = e.NewValue;
         _session?.SetScreenOpacity(e.NewValue);
         UpdateScreenOpacityLabel();
+
+        // Loading a profile writes this slider too, and that is not a change the
+        // player made - saving it back would be a write per game switch.
+        if (_loading)
+        {
+            return;
+        }
 
         // A slider raises this on every mouse-move tick, and every other setting
         // here saves immediately - doing that would rewrite the profile dozens of
@@ -505,8 +555,7 @@ public partial class ControlPanelWindow : Window
 
     private void OnMouseModeChanged(object sender, RoutedEventArgs e)
     {
-        // Fires during InitializeComponent, before the hint exists.
-        if (MouseModeHint is null)
+        if (!_ready)
         {
             return;
         }

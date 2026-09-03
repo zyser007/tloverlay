@@ -36,10 +36,12 @@ public partial class RegionEditorWindow : Window
 
     public RegionEditorWindow(IntPtr gameWindow, CaptureRegion? existing = null)
     {
-        InitializeComponent();
-
+        // Before InitializeComponent: XAML raises events as it parses, and those
+        // handlers read these fields.
         _gameWindow = gameWindow;
         _current = existing?.IsValid == true ? existing.Bounds : null;
+
+        InitializeComponent();
 
         SourceInitialized += OnSourceInitialized;
         Loaded += (_, _) => Redraw();

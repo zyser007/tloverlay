@@ -146,4 +146,32 @@ public class ProfileStoreTests : IDisposable
         Assert.True(File.Exists(path));
         Assert.Equal(_directory, Path.GetDirectoryName(path));
     }
+
+    [Fact]
+    public void AProfileFileWithNullCollectionsStillLoads()
+    {
+        // A hand-edited or half-written file, or one from a version that did not
+        // have these fields. Deserialization hands the setter null, and without a
+        // guard there the failure surfaces much later as a NullReferenceException
+        // with nothing pointing back at the file.
+        var store = new ProfileStore(_directory);
+        string path = store.Save(GameProfile.CreateDefault("Nulls"));
+
+        File.WriteAllText(path, """
+            {
+              "name": "Nulls",
+              "regions": null,
+              "glossary": null
+            }
+            """);
+
+        GameProfile? loaded = store.LoadAll().SingleOrDefault(p => p.Name == "Nulls");
+
+        Assert.NotNull(loaded);
+        Assert.Empty(loaded.Regions);
+        Assert.Empty(loaded.Glossary);
+
+        // The one that used to throw.
+        Assert.Null(loaded.Region);
+    }
 }

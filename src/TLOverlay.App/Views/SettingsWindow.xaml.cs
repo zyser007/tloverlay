@@ -45,12 +45,17 @@ public partial class SettingsWindow : Window
 
     public SettingsWindow(AppSettings settings, GlobalHotKeyService hotKeys, UpdateService updates)
     {
-        InitializeComponent();
-
+        // Before InitializeComponent, not after: XAML raises events while it is
+        // parsing - a SelectionChanged from a SelectedIndex, a Checked from an
+        // IsChecked - and those handlers run against these fields. Assigning them
+        // first is what makes that safe, rather than each handler having to know
+        // how far the parser had got.
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _hotKeys = hotKeys ?? throw new ArgumentNullException(nameof(hotKeys));
         _updates = updates ?? throw new ArgumentNullException(nameof(updates));
         _bindings = [.. HotKeyProfile.Load(settings)];
+
+        InitializeComponent();
 
         WindowSizing.ClampToWorkArea(this);
 

@@ -97,8 +97,17 @@ public sealed class GameProfile
     /// Still a list, because that is what the pipeline and the saved profiles
     /// already speak, but the UI edits exactly one. Several regions turned out to
     /// be more configuration than the job needs.
+    ///
+    /// Null-tolerant on the way in: System.Text.Json calls the setter with null
+    /// for "regions": null, which replaces the default and turns the next read
+    /// of <see cref="Region"/> into a NullReferenceException nowhere near the
+    /// profile file that caused it.
     /// </summary>
-    public List<CaptureRegion> Regions { get; set; } = [CaptureRegion.BottomDialogue];
+    public List<CaptureRegion> Regions
+    {
+        get => _regions;
+        set => _regions = value ?? [];
+    }
 
     /// <summary>
     /// Where the player dragged the translation panel, if they did.
@@ -134,7 +143,15 @@ public sealed class GameProfile
     /// <summary>How often we pull a frame for change detection.</summary>
     public int PollIntervalMilliseconds { get; set; } = 120;
 
-    public List<GlossaryTerm> Glossary { get; set; } = [];
+    /// <summary>Null-tolerant for the same reason as <see cref="Regions"/>.</summary>
+    public List<GlossaryTerm> Glossary
+    {
+        get => _glossary;
+        set => _glossary = value ?? [];
+    }
+
+    private List<CaptureRegion> _regions = [CaptureRegion.BottomDialogue];
+    private List<GlossaryTerm> _glossary = [];
 
     /// <summary>The one capture region, or null when none has been drawn yet.</summary>
     public CaptureRegion? Region => Regions.FirstOrDefault(static r => r.IsValid);

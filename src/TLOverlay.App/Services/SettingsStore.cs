@@ -16,7 +16,17 @@ public sealed class AppSettings
     /// </summary>
     public int SchemaVersion { get; set; } = SettingsStore.CurrentSchemaVersion;
 
-    public TranslatorSettings Translator { get; set; } = new();
+    /// <summary>
+    /// Null-tolerant on the way in, here and below: System.Text.Json calls the
+    /// setter with null when the file says "translator": null, which quietly
+    /// replaces the default and turns the next read into a
+    /// NullReferenceException far away from the file that caused it.
+    /// </summary>
+    public TranslatorSettings Translator
+    {
+        get => _translator;
+        set => _translator = value ?? new TranslatorSettings();
+    }
 
     /// <summary>Profile to use when no per-game profile matches.</summary>
     public string DefaultProfileName { get; set; } = "Default";
@@ -48,7 +58,14 @@ public sealed class AppSettings
     /// "Ctrl+Shift+T"}. Only the differences are kept, so an action added later
     /// arrives with a working default rather than no key at all.
     /// </summary>
-    public Dictionary<string, string> HotKeys { get; set; } = [];
+    public Dictionary<string, string> HotKeys
+    {
+        get => _hotKeys;
+        set => _hotKeys = value ?? [];
+    }
+
+    private TranslatorSettings _translator = new();
+    private Dictionary<string, string> _hotKeys = [];
 }
 
 /// <summary>Reads and writes settings.json under %LocalAppData%\TLOverlay.</summary>

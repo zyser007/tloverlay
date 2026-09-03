@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Threading;
 using Serilog;
+using TLOverlay.App.Interop;
 using TLOverlay.App.Services;
 using TLOverlay.App.Views;
 
@@ -31,6 +32,35 @@ public partial class App : Application
             return;
         }
 
+        // Installed before anything that could fail, including the logger itself.
+        // A crash while the app is still setting itself up is precisely the one
+        // nobody can diagnose afterwards.
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Report(args.ExceptionObject as Exception, "Unhandled exception.");
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Report(args.Exception, "Unobserved task exception.");
+            args.SetObserved();
+        };
+
+        try
+        {
+            Start(e);
+        }
+        catch (Exception ex)
+        {
+            // Nothing is running yet, so there is no overlay worth keeping alive.
+            // Staying up would leave an invisible TLOverlay in Task Manager with
+            // no window to close - which is what 0.3.0 did.
+            Report(ex, "TLOverlay failed to start.");
+            ShowCrashDialog(ex);
+            Shutdown(1);
+        }
+    }
+
+    private void Start(StartupEventArgs e)
+    {
         AppPaths.EnsureCreated();
 
         Log.Logger = new LoggerConfiguration()
@@ -41,13 +71,16 @@ public partial class App : Application
                 retainedFileCountLimit: 7)
             .CreateLogger();
 
-        Log.Information("TLOverlay starting.");
+        Log.Information("TLOverlay {Version} starting.", Version);
 
-        // An unhandled exception on the UI thread would otherwise take down the
-        // overlay mid-game with no trace of why.
-        DispatcherUnhandledException += OnDispatcherUnhandledException;
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            Log.Error(args.ExceptionObject as Exception, "Unhandled exception.");
+        // Unlike --version, this one builds every window. It is the check that
+        // would have caught 0.3.0, where the panel threw while its XAML was
+        // still being parsed and the app could not open at all.
+        if (e.Args.Any(static arg => string.Equals(arg, "--self-test", StringComparison.OrdinalIgnoreCase)))
+        {
+            Shutdown(SelfTest());
+            return;
+        }
 
         base.OnStartup(e);
 
@@ -85,15 +118,95 @@ public partial class App : Application
         panel.Show();
     }
 
+    /// <summary>
+    /// Builds every window without showing one, and reports whether that worked.
+    /// Run against the published executable in CI, so a build that cannot open
+    /// is never uploaded to a release.
+    /// </summary>
+    private static int SelfTest()
+    {
+        try
+        {
+            var settings = SettingsStore.Load(DataDirectory);
+            using var hotKeys = new GlobalHotKeyService();
+            var updates = new UpdateService(settings);
+
+            _ = new SetupWindow(settings);
+            _ = new SettingsWindow(settings, hotKeys, updates);
+            _ = new ControlPanelWindow();
+
+            Console.Out.WriteLine("self-test: every window was built.");
+            Console.Out.Flush();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Self-test failed.");
+            Console.Error.WriteLine("self-test: FAILED");
+            Console.Error.WriteLine(ex.ToString());
+            Console.Error.Flush();
+            return 1;
+        }
+    }
+
     private static void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        Log.Error(e.Exception, "Unhandled exception on the UI thread.");
+        Report(e.Exception, "Unhandled exception on the UI thread.");
+        ShowCrashDialog(e.Exception);
+
+        // Deliberately kept alive: this fires for failures during play, and
+        // taking the overlay down mid-game helps nobody. A failure while the app
+        // is still starting is handled in OnStartup instead, which does exit.
+        e.Handled = true;
+    }
+
+    private static void Report(Exception? exception, string message)
+    {
+        Log.Error(exception, "{Message}", message);
+
+        // Serilog may not be configured yet, or may be the thing that failed, so
+        // the crash file is written independently of it.
+        if (exception is null)
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(AppPaths.LogsDirectory);
+            File.WriteAllText(
+                CrashFilePath(),
+                $"TLOverlay {Version} - {DateTimeOffset.Now:u}{Environment.NewLine}" +
+                $"{message}{Environment.NewLine}{Environment.NewLine}{exception}{Environment.NewLine}");
+        }
+        catch (Exception writeFailure) when (writeFailure is IOException or UnauthorizedAccessException)
+        {
+            // Nothing left to report it to.
+        }
+    }
+
+    /// <summary>
+    /// Timestamped rather than fixed, so a second failure - the one that often
+    /// happens while the first is being handled - does not overwrite the report
+    /// that actually explains what went wrong.
+    /// </summary>
+    private static string CrashFilePath() => Path.Combine(
+        AppPaths.LogsDirectory,
+        $"crash-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+
+    private static void ShowCrashDialog(Exception exception)
+    {
+        // The type and the log location, not just the message: "Object reference
+        // not set to an instance of an object." on its own tells a player nothing
+        // and tells whoever has to fix it even less.
         MessageBox.Show(
-            e.Exception.Message,
+            $"{exception.GetType().Name}: {exception.Message}" +
+            Environment.NewLine + Environment.NewLine +
+            "รายละเอียดทั้งหมดถูกบันทึกไว้ที่" + Environment.NewLine +
+            AppPaths.LogsDirectory,
             "TLOverlay",
             MessageBoxButton.OK,
             MessageBoxImage.Error);
-        e.Handled = true;
     }
 
     protected override void OnExit(ExitEventArgs e)

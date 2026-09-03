@@ -38,5 +38,12 @@ public static class AppPaths
         Directory.CreateDirectory(DataDirectory);
         Directory.CreateDirectory(ModelsDirectory);
         Directory.CreateDirectory(RuntimeDirectory);
+
+        // Logs and profiles used to be left to whoever wrote to them first. The
+        // file logger creates its own folder but swallows the failure if it
+        // cannot, which is a bad trade for the one folder you go looking for
+        // after a crash.
+        Directory.CreateDirectory(LogsDirectory);
+        Directory.CreateDirectory(ProfilesDirectory);
     }
 }

@@ -58,6 +58,33 @@ jobs:
         run: |
           $exe = "artifacts/TLOverlay-win-x64/TLOverlay.exe"
           if (-not (Test-Path $exe)) { throw "TLOverlay.exe was not produced" }
+
+      # Building every window without showing one. This is the check 0.3.0
+      # needed and did not have: the panel threw while its XAML was still being
+      # parsed, so the app could not open at all, and nothing between the commit
+      # and the release noticed. --version cannot catch that - it answers and
+      # exits before a window exists.
+      - name: Smoke-test the executable
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "artifacts/TLOverlay-win-x64/TLOverlay.exe").Path
+          $out = Join-Path $env:RUNNER_TEMP "self-test-out.txt"
+          $err = Join-Path $env:RUNNER_TEMP "self-test-err.txt"
+
+          $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru `
+            -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow
+
+          # A window that blocks on a dialog would otherwise hang the job for
+          # hours rather than failing it.
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw "TLOverlay --self-test did not exit within 120 seconds"
+          }
+
+          Get-Content $out, $err -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) {
+            throw "TLOverlay --self-test exited with $($process.ExitCode)"
+          }
           $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
           Write-Host "TLOverlay.exe is $mb MB"
 

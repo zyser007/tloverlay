@@ -37,12 +37,14 @@ public partial class SetupWindow : Window
 
     public SetupWindow(AppSettings settings)
     {
+        // Before InitializeComponent: XAML raises events as it parses, and those
+        // handlers read these fields.
+        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _downloader = new ModelDownloader(_http);
+
         InitializeComponent();
 
         WindowSizing.ClampToWorkArea(this);
-
-        _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _downloader = new ModelDownloader(_http);
 
         foreach (var entry in ModelCatalog.Entries)
         {

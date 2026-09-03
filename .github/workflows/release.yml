@@ -56,6 +56,29 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           --output artifacts/TLOverlay-win-x64
 
+      # Between publishing and packaging on purpose: a build that cannot open a
+      # window must not reach a release asset. 0.3.0 did, and it left everyone
+      # who downloaded it with an error box and no way back.
+      - name: Smoke-test the executable
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "artifacts/TLOverlay-win-x64/TLOverlay.exe").Path
+          $out = Join-Path $env:RUNNER_TEMP "self-test-out.txt"
+          $err = Join-Path $env:RUNNER_TEMP "self-test-err.txt"
+
+          $process = Start-Process -FilePath $exe -ArgumentList "--self-test" -PassThru `
+            -RedirectStandardOutput $out -RedirectStandardError $err -NoNewWindow
+
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw "TLOverlay --self-test did not exit within 120 seconds"
+          }
+
+          Get-Content $out, $err -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) {
+            throw "TLOverlay --self-test exited with $($process.ExitCode)"
+          }
+
       - name: Stage the package
         shell: pwsh
         run: |
