@@ -35,6 +35,7 @@ public sealed class TranslationSession : IAsyncDisposable
     private bool _clickThrough = true;
     private TranslationMode _mode = TranslationMode.Automatic;
     private double _screenOpacity = 1.0;
+    private double? _fontSize;
     private bool _regionVisible;
     private bool _disposed;
 
@@ -104,6 +105,15 @@ public sealed class TranslationSession : IAsyncDisposable
         _overlay.Attach(target.Handle, profile);
         _overlay.SetTranslationsVisible(_translationsVisible);
         _overlay.SetScreenOpacity(_screenOpacity);
+
+        // Only when the panel has actually chosen one. Attach has already applied
+        // the profile's size, and writing a default over it would undo the
+        // player's choice every time editing a region restarts the session.
+        if (_fontSize is { } fontSize)
+        {
+            _overlay.SetFontSize(fontSize);
+        }
+
         _overlay.ScreenTranslationInvalidated += OnScreenTranslationInvalidated;
         _overlay.SetRegionVisible(_regionVisible);
         _overlay.SetClickThrough(_clickThrough);
@@ -202,6 +212,18 @@ public sealed class TranslationSession : IAsyncDisposable
     {
         _screenOpacity = Math.Clamp(opacity, 0, 1);
         _overlay?.SetScreenOpacity(_screenOpacity);
+    }
+
+    /// <summary>
+    /// Held in a field as well as pushed, for the same reason as the mode:
+    /// editing a capture region stops and starts the session.
+    /// </summary>
+    public void SetFontSize(double fontSize)
+    {
+        double clamped = Math.Clamp(fontSize, GameProfile.MinimumFontSize, GameProfile.MaximumFontSize);
+
+        _fontSize = clamped;
+        _overlay?.SetFontSize(clamped);
     }
 
     /// <summary>Translates what is on screen right now, whatever the mode.</summary>

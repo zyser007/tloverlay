@@ -37,10 +37,9 @@ public partial class OverlayWindow : Window
     private const double LabelPadding = 2;
 
     private const double MinimumLabelSize = 10;
-    private const double MinimumLabelFontSize = 9;
 
-    /// <summary>How much wider than its English a label may grow before shrinking instead.</summary>
-    private const double MaxLabelGrowth = 1.6;
+    /// <summary>Height one line of text occupies, as a multiple of its font size.</summary>
+    private const double LineHeightFactor = 1.4;
 
     private readonly DispatcherTimer _topmostTimer;
 
@@ -419,6 +418,27 @@ public partial class OverlayWindow : Window
         _busyBadge.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
+    /// Resizes the text already on screen, without re-translating it.
+    ///
+    /// Unlike opacity this does need re-measuring, so the labels are laid out
+    /// again - but from the translations already held, so dragging the slider
+    /// costs nothing but layout.
+    /// </summary>
+    public void SetFontSize(double fontSize)
+    {
+        _profile.FontSize = Math.Clamp(fontSize, GameProfile.MinimumFontSize, GameProfile.MaximumFontSize);
+
+        _text.FontSize = _profile.FontSize;
+
+        if (_hasText)
+        {
+            LayoutPanel(translation: null);
+        }
+
+        LayoutScreenLabels();
+    }
+
+    /// <summary>
     /// Repaints the label backgrounds at a new opacity, without re-translating
     /// or re-measuring anything - the slider has to answer while it is dragged.
     /// </summary>
@@ -466,10 +486,15 @@ public partial class OverlayWindow : Window
             // always longer than the English it replaces.
             if (needed > width)
             {
-                double grown = Math.Min(needed, width * MaxLabelGrowth);
+                double grown = Math.Min(needed, width * ScreenLabelMetrics.GrowthFor(_profile.FontSize));
                 left -= (grown - width) / 2;   // about the centre: game text is often centred
                 width = grown;
             }
+
+            // Taller too, when the player has scaled the text up past what the
+            // OCR box held. The Border would grow on its own, but the clamp
+            // below has to know about it or the last line is pushed off-screen.
+            height = Math.Max(height, fontSize * LineHeightFactor);
 
             left = Math.Clamp(left, 0, Math.Max(0, ActualWidth - width));
             top = Math.Clamp(top, 0, Math.Max(0, ActualHeight - height));
@@ -520,14 +545,17 @@ public partial class OverlayWindow : Window
         double boxHeight,
         out double needed)
     {
-        double size = Math.Clamp(boxHeight * 0.68, MinimumLabelFontSize, _profile.FontSize);
+        double size = ScreenLabelMetrics.StartingFontSize(boxHeight, _profile.FontSize);
         needed = Measure(text, typeface, pixelsPerDip, size);
 
-        double usable = Math.Max(1, boxWidth - 6);
+        double fitted = ScreenLabelMetrics.ShrinkToFit(
+            size,
+            needed,
+            ScreenLabelMetrics.WidthBudget(boxWidth, _profile.FontSize));
 
-        if (needed > usable)
+        if (fitted < size)
         {
-            size = Math.Max(MinimumLabelFontSize, size * usable / needed);
+            size = fitted;
             needed = Measure(text, typeface, pixelsPerDip, size);
         }
 
@@ -542,7 +570,7 @@ public partial class OverlayWindow : Window
             typeface,
             fontSize,
             Brushes.White,
-            pixelsPerDip).Width + 6;
+            pixelsPerDip).Width + ScreenLabelMetrics.SideMargin;
 
     public void ClearText()
     {

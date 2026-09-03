@@ -47,7 +47,12 @@ public partial class ControlPanelWindow : Window
         Interval = TimeSpan.FromSeconds(1),
     };
 
-    private readonly DispatcherTimer _opacitySaveTimer = new(DispatcherPriority.Background)
+    /// <summary>
+    /// Shared by every per-game slider. They raise their event on each mouse-move
+    /// tick, and every other setting here saves immediately - doing that would
+    /// rewrite the profile dozens of times per drag.
+    /// </summary>
+    private readonly DispatcherTimer _profileSaveTimer = new(DispatcherPriority.Background)
     {
         Interval = TimeSpan.FromMilliseconds(400),
     };
@@ -93,13 +98,14 @@ public partial class ControlPanelWindow : Window
         BuildHotKeyGrid(failed);
         UpdateMouseModeHint();
         UpdateTranslateModeHint();
+        UpdateFontSizeLabel();
 
         _metricsTimer.Tick += (_, _) => UpdateMetrics();
         _metricsTimer.Start();
 
-        _opacitySaveTimer.Tick += (_, _) =>
+        _profileSaveTimer.Tick += (_, _) =>
         {
-            _opacitySaveTimer.Stop();
+            _profileSaveTimer.Stop();
             _profiles.Save(_profile);
         };
 
@@ -234,6 +240,7 @@ public partial class ControlPanelWindow : Window
         try
         {
             ScreenOpacitySlider.Value = Math.Clamp(_profile.ScreenOverlayOpacity, ScreenOpacitySlider.Minimum, 1.0);
+            FontSizeSlider.Value = Math.Clamp(_profile.FontSize, FontSizeSlider.Minimum, FontSizeSlider.Maximum);
         }
         finally
         {
@@ -241,6 +248,7 @@ public partial class ControlPanelWindow : Window
         }
 
         UpdateScreenOpacityLabel();
+        UpdateFontSizeLabel();
 
         // Exclusive fullscreen is the most common reason capture comes back
         // black, and it is not obvious to the player, so say it plainly.
@@ -364,6 +372,7 @@ public partial class ControlPanelWindow : Window
         session.SetClickThrough(ClickThrough);
         session.SetMode(SelectedMode);
         session.SetScreenOpacity(_profile.ScreenOverlayOpacity);
+        session.SetFontSize(_profile.FontSize);
         session.ScreenPassBusy += (_, busy) => Dispatcher.Invoke(() => SetScreenPassBusy(busy));
 
         return session;
@@ -507,6 +516,29 @@ public partial class ControlPanelWindow : Window
     private void UpdateScreenOpacityLabel() =>
         ScreenOpacityLabel.Text = $"ความทึบของกล่องคำแปล {_profile.ScreenOverlayOpacity:P0}";
 
+    private void UpdateFontSizeLabel() =>
+        FontSizeLabel.Text = $"ขนาดตัวอักษรคำแปล {_profile.FontSize:0} pt";
+
+    private void OnFontSizeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        _profile.FontSize = e.NewValue;
+        _session?.SetFontSize(e.NewValue);
+        UpdateFontSizeLabel();
+
+        if (_loading)
+        {
+            return;
+        }
+
+        _profileSaveTimer.Stop();
+        _profileSaveTimer.Start();
+    }
+
     private void OnScreenOpacityChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (!_ready)
@@ -528,8 +560,8 @@ public partial class ControlPanelWindow : Window
         // A slider raises this on every mouse-move tick, and every other setting
         // here saves immediately - doing that would rewrite the profile dozens of
         // times per drag.
-        _opacitySaveTimer.Stop();
-        _opacitySaveTimer.Start();
+        _profileSaveTimer.Stop();
+        _profileSaveTimer.Start();
     }
 
     private async Task TranslateOnceAsync()
@@ -826,7 +858,7 @@ public partial class ControlPanelWindow : Window
     private async void OnClosed(object? sender, EventArgs e)
     {
         _metricsTimer.Stop();
-        _opacitySaveTimer.Stop();
+        _profileSaveTimer.Stop();
         _profiles.Save(_profile);
         _hotKeys.Pressed -= OnHotKey;
         _hotKeys.Dispose();

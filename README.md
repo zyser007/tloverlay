@@ -119,6 +119,13 @@ every line in **one** request, and covers each original with an opaque Thai
 label. The labels stay until the next press; `Ctrl+Alt+H` hides and shows them.
 The opacity of those labels is a slider, saved per game.
 
+Text size is a slider too, next to it, and it applies to both presentations. For
+the subtitle panel it is the size outright; for full-screen labels it scales the
+size each label takes from its own OCR box, so a menu entry and a line of
+dialogue stay proportioned to each other. Turned up far enough, labels grow past
+the English they cover and may overlap the lines around them - which is the
+right trade when the alternative is text too small to read.
+
 It only works on demand, and that is structural rather than a preference: a whole
 game screen always has something moving on it - a clock, a health bar, an idle
 animation - so change detection over the window would fire continuously and

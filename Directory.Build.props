@@ -20,7 +20,7 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <Product>TLOverlay</Product>
     <Company>TLOverlay</Company>
-    <Version>0.3.2</Version>
+    <Version>0.3.3</Version>
   </PropertyGroup>
 
 </Project>

@@ -120,7 +120,26 @@ public sealed class GameProfile
 
     public OverlayDisplayMode DisplayMode { get; set; } = OverlayDisplayMode.Subtitle;
 
-    public double FontSize { get; set; } = 22;
+    /// <summary>Smallest translation text the player may choose, in points.</summary>
+    public const double MinimumFontSize = 12;
+
+    /// <summary>
+    /// Largest translation text the player may choose.
+    ///
+    /// Not a technical limit: past roughly this size a full-screen label covers
+    /// the lines above and below the one it is translating, and the screen stops
+    /// being readable at all.
+    /// </summary>
+    public const double MaximumFontSize = 48;
+
+    /// <summary>
+    /// Size of the translation text.
+    ///
+    /// Used outright by the subtitle panel, and as the scale for full-screen
+    /// labels, whose size comes from each line's own OCR box - see
+    /// <see cref="Pipeline.ScreenLabelMetrics"/>.
+    /// </summary>
+    public double FontSize { get; set; } = Pipeline.ScreenLabelMetrics.NeutralFontSize;
 
     /// <summary>Background opacity of the translation panel, 0..1.</summary>
     public double BackgroundOpacity { get; set; } = 0.82;

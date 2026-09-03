@@ -219,6 +219,17 @@
                        TextWrapping="Wrap"
                        Margin="0,8,0,0" />
 
+            <!-- Not inside the panel below: the size applies to both
+                 presentations, so it stays on screen in every mode. -->
+            <StackPanel Margin="0,10,0,0">
+              <TextBlock x:Name="FontSizeLabel" Style="{StaticResource CardHeading}" Margin="0,0,0,4" />
+              <Slider x:Name="FontSizeSlider" Style="{StaticResource ThinSlider}"
+                      Minimum="12" Maximum="48" Value="22" Width="220"
+                      TickFrequency="1" IsSnapToTickEnabled="True"
+                      HorizontalAlignment="Left"
+                      ValueChanged="OnFontSizeChanged" />
+            </StackPanel>
+
             <!-- Only meaningful in full-screen mode, so it appears with it. -->
             <StackPanel x:Name="ScreenOpacityPanel" Visibility="Collapsed" Margin="0,10,0,0">
               <TextBlock x:Name="ScreenOpacityLabel" Style="{StaticResource CardHeading}" Margin="0,0,0,4" />
